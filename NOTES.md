@@ -22,3 +22,7 @@ This file is the persistent running log for strategy decisions, setup rules, los
 - Added multi-source analysis focus: DXY, US10Y yields, VIX, oil, silver, S&P 500, and news context.
 - Enforced risk-first behavior for small account sizing and minimum lot constraints.
 - [2026-08-20 00:00] Paper signal at 2026-08-20 00:00 UTC+3: BUY trigger confirmed above 4493.5; entry zone 4492.8-4493.6, SL 4489.8, TP 4498.5/4502.0, invalidate on 1H close below 4491.8.
+
+### 2026-08-20
+
+- Added safe grid playbook in SAFE_GRID_RULES.md: max 3 layers, 3.0-dollar spacing, 2.5% basket hard stop, and kill-switch rules.
