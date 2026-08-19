@@ -21,3 +21,4 @@ This file is the persistent running log for strategy decisions, setup rules, los
 - Initialized notes workflow in repo.
 - Added multi-source analysis focus: DXY, US10Y yields, VIX, oil, silver, S&P 500, and news context.
 - Enforced risk-first behavior for small account sizing and minimum lot constraints.
+- [2026-08-20 00:00] Paper signal at 2026-08-20 00:00 UTC+3: BUY trigger confirmed above 4493.5; entry zone 4492.8-4493.6, SL 4489.8, TP 4498.5/4502.0, invalidate on 1H close below 4491.8.
