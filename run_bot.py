@@ -13,7 +13,8 @@ from src.notifier import send_telegram
 
 
 def _env_float(name: str, default: float) -> float:
-    return float(os.environ.get(name, default))
+    value = os.environ.get(name, "")
+    return float(value) if value else default
 
 
 def build_message(
