@@ -37,9 +37,15 @@ def build_message(
 
     if signal_stats.resolved > 0:
         track_record = (
-            f"Track record: {signal_stats.wins}W / {signal_stats.losses}L "
+            f"Track record (all rule calls): {signal_stats.wins}W / {signal_stats.losses}L "
             f"({signal_stats.win_rate:.1f}% win rate), {signal_stats.open_count} still open"
         )
+        if signal_stats.actionable_resolved > 0:
+            track_record += (
+                f"\nOf those, actually tradable at your account size: {signal_stats.actionable_wins}W / "
+                f"{signal_stats.actionable_resolved - signal_stats.actionable_wins}L "
+                f"({signal_stats.actionable_win_rate:.1f}% win rate)"
+            )
     else:
         track_record = f"Track record: no resolved signals yet ({signal_stats.open_count} open)"
 
@@ -144,15 +150,16 @@ def main() -> None:
     print("Resolving open tracked signals against fresh price data...")
     resolve_open_signals()
 
-    if execution_signal in ("BUY", "SELL"):
+    if advice.action in ("BUY", "SELL"):
         log_signal(
             now=now,
-            action=execution_signal,
+            action=advice.action,
             entry=advice.entry,
             stop=advice.stop_loss,
             target=advice.take_profit,
             confidence=advice.confidence,
             trend=advice.trend,
+            actionable=(execution_signal == advice.action),
         )
 
     signal_stats = get_signal_stats()

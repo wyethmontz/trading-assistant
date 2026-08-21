@@ -1,1 +1,1 @@
-timestamp,action,entry,stop,target,confidence,trend,status,resolved_at,resolved_price
+timestamp,action,entry,stop,target,confidence,trend,actionable,status,resolved_at,resolved_price

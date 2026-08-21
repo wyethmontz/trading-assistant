@@ -19,6 +19,7 @@ COLUMNS = [
     "target",
     "confidence",
     "trend",
+    "actionable",
     "status",
     "resolved_at",
     "resolved_price",
@@ -40,7 +41,20 @@ def load_signal_log() -> pd.DataFrame:
     return df
 
 
-def log_signal(now: datetime, action: str, entry: float, stop: float, target: float, confidence: int, trend: str) -> None:
+def log_signal(
+    now: datetime,
+    action: str,
+    entry: float,
+    stop: float,
+    target: float,
+    confidence: int,
+    trend: str,
+    actionable: bool,
+) -> None:
+    """Log a rule-fired BUY/SELL for outcome tracking, regardless of whether it was
+    actually tradable right now. `actionable` records whether it survived the
+    guardrails (feasibility/confidence/adaptive), so we can learn if the rule
+    itself is right even during stretches where nothing is tradable yet."""
     _ensure_log_file()
     row = {
         "timestamp": now.isoformat(),
@@ -50,6 +64,7 @@ def log_signal(now: datetime, action: str, entry: float, stop: float, target: fl
         "target": target,
         "confidence": confidence,
         "trend": trend,
+        "actionable": actionable,
         "status": "open",
         "resolved_at": "",
         "resolved_price": "",
@@ -115,18 +130,30 @@ class SignalStats:
     losses: int
     open_count: int
     win_rate: float
+    actionable_resolved: int
+    actionable_wins: int
+    actionable_win_rate: float
 
 
 def get_signal_stats() -> SignalStats:
     df = load_signal_log()
     if df.empty:
-        return SignalStats(total=0, resolved=0, wins=0, losses=0, open_count=0, win_rate=0.0)
+        return SignalStats(
+            total=0, resolved=0, wins=0, losses=0, open_count=0, win_rate=0.0,
+            actionable_resolved=0, actionable_wins=0, actionable_win_rate=0.0,
+        )
 
+    resolved_mask = df["status"].isin(["win", "loss"])
     wins = int((df["status"] == "win").sum())
     losses = int((df["status"] == "loss").sum())
     open_count = int((df["status"] == "open").sum())
     resolved = wins + losses
     win_rate = (wins / resolved * 100) if resolved else 0.0
+
+    actionable_resolved_df = df[resolved_mask & (df["actionable"] == True)]  # noqa: E712
+    actionable_resolved = len(actionable_resolved_df)
+    actionable_wins = int((actionable_resolved_df["status"] == "win").sum())
+    actionable_win_rate = (actionable_wins / actionable_resolved * 100) if actionable_resolved else 0.0
 
     return SignalStats(
         total=len(df),
@@ -135,4 +162,7 @@ def get_signal_stats() -> SignalStats:
         losses=losses,
         open_count=open_count,
         win_rate=win_rate,
+        actionable_resolved=actionable_resolved,
+        actionable_wins=actionable_wins,
+        actionable_win_rate=actionable_win_rate,
     )
