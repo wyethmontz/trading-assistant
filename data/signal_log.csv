@@ -1,1 +1,2 @@
 timestamp,action,entry,stop,target,confidence,trend,actionable,status,resolved_at,resolved_price
+2026-08-21T12:31:10.943390+00:00,BUY,4571.27978515625,4545.5267986404615,4622.785758187827,85,Bullish,True,open,,
