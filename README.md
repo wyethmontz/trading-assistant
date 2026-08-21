@@ -68,3 +68,38 @@ The app analyzes recent closed trades and automatically recommends tighter risk 
 - Data symbol: `GC=F` (COMEX Gold Futures proxy).
 - The assistant is educational and not financial advice.
 - Always confirm signals with your own analysis and broker constraints.
+
+## Automated Signal Bot
+
+`run_bot.py` runs the same advisor pipeline headless (Swing 1h data, macro/news guardrails, adaptive journal risk cap) and sends the resulting signal to Telegram. It only ever notifies — it never places trades.
+
+### Run locally
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "your_bot_token"
+$env:TELEGRAM_CHAT_ID = "your_chat_id"
+python run_bot.py
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather | required to send |
+| `TELEGRAM_CHAT_ID` | Target chat/channel id | required to send |
+| `ACCOUNT_BALANCE` | Account balance in USD | `64.18` |
+| `RISK_PCT` | Risk per trade (%) | `0.5` |
+| `CONFIDENCE_FLOOR` | Minimum confidence to act on a signal | `65` |
+| `ADAPTIVE_MODE` | Tighten risk/confidence after a loss streak | `true` |
+| `XM_SYMBOL`, `CONTRACT_SIZE`, `MIN_LOT`, `LOT_STEP`, `MAX_LOT`, `SPREAD_USD` | Broker guardrail specs | match XM defaults in `app.py` |
+
+### Automated schedule
+
+Same pattern as `fuel-forecast-bot-py`: [.github/workflows/signal.yml](.github/workflows/signal.yml) exposes a `workflow_dispatch` trigger, and [cron-job.org](https://cron-job.org) calls it hourly via the GitHub Actions API. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` as repo secrets, and optionally `ACCOUNT_BALANCE` / `RISK_PCT` as repo variables, before enabling the schedule.
+
+### Run with Docker
+
+```bash
+docker build -t gold-signal-bot .
+docker run -e TELEGRAM_BOT_TOKEN=your_bot_token -e TELEGRAM_CHAT_ID=your_chat_id gold-signal-bot
+```
