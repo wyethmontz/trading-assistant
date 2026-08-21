@@ -1,0 +1,187 @@
+"""Walk-forward backtest of the src.advisor rule against historical gold data.
+
+No lookahead: at each bar, the advice is computed using only data up to and
+including that bar's close, then the (hypothetical) entry happens at the
+*next* bar's open. Only one position is held at a time (no pyramiding),
+matching how a small single-position account would actually trade this.
+"""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.advisor import build_advice
+from src.indicators import add_indicators
+from src.market_data import get_gold_data
+
+
+@dataclass
+class Trade:
+    action: str
+    entry_index: int
+    entry_price: float
+    exit_price: float
+    stop: float
+    target: float
+    outcome: str  # "win" | "loss"
+    r_multiple: float
+    net_r_multiple: float
+
+
+def run_backtest(
+    period: str = "730d",
+    interval: str = "1h",
+    account_balance: float = 64.18,
+    risk_pct: float = 0.5,
+    spread_usd: float = 0.55,
+) -> list[Trade]:
+    raw_df = get_gold_data(period=period, interval=interval)
+    if raw_df.empty:
+        raise RuntimeError("No market data returned.")
+
+    df = add_indicators(raw_df).dropna().copy().reset_index(drop=True)
+
+    trades: list[Trade] = []
+    position = None
+
+    for i in range(55, len(df) - 1):
+        if position is None:
+            advice = build_advice(df.iloc[: i + 1], account_balance=account_balance, risk_pct=risk_pct)
+            if advice.action in ("BUY", "SELL"):
+                entry_index = i + 1
+                entry_price = float(df.iloc[entry_index]["Open"])
+                risk_per_unit = abs(entry_price - advice.stop_loss)
+                if risk_per_unit <= 0:
+                    continue
+                position = {
+                    "action": advice.action,
+                    "entry_index": entry_index,
+                    "entry_price": entry_price,
+                    "stop": advice.stop_loss,
+                    "target": advice.take_profit,
+                    "risk_per_unit": risk_per_unit,
+                }
+            continue
+
+        if i < position["entry_index"]:
+            continue
+
+        bar = df.iloc[i]
+        if position["action"] == "BUY":
+            hit_stop = bar["Low"] <= position["stop"]
+            hit_target = bar["High"] >= position["target"]
+        else:
+            hit_stop = bar["High"] >= position["stop"]
+            hit_target = bar["Low"] <= position["target"]
+
+        if not hit_stop and not hit_target:
+            continue
+
+        # if both trigger in the same bar, assume the worse case (stop first)
+        if hit_stop:
+            exit_price = position["stop"]
+            outcome = "loss"
+        else:
+            exit_price = position["target"]
+            outcome = "win"
+
+        signed = 1 if position["action"] == "BUY" else -1
+        r_multiple = signed * (exit_price - position["entry_price"]) / position["risk_per_unit"]
+        # spread is paid once per round trip (enter at ask, exit at bid);
+        # expressed in R using this trade's own risk-per-unit (stop distance)
+        net_r_multiple = r_multiple - (spread_usd / position["risk_per_unit"])
+
+        trades.append(
+            Trade(
+                action=position["action"],
+                entry_index=position["entry_index"],
+                entry_price=position["entry_price"],
+                exit_price=exit_price,
+                stop=position["stop"],
+                target=position["target"],
+                outcome=outcome,
+                r_multiple=r_multiple,
+                net_r_multiple=net_r_multiple,
+            )
+        )
+        position = None
+
+    return trades
+
+
+def _stats(trades: list[Trade], key: str) -> dict:
+    values = [getattr(t, key) for t in trades]
+    wins = [v for v in values if v > 0]
+    losses = [v for v in values if v <= 0]
+
+    win_rate = len(wins) / len(values) * 100 if values else 0.0
+    avg_win = sum(wins) / len(wins) if wins else 0.0
+    avg_loss = sum(losses) / len(losses) if losses else 0.0
+    expectancy = sum(values) / len(values) if values else 0.0
+
+    gross_win = sum(wins)
+    gross_loss = abs(sum(losses))
+    profit_factor = gross_win / gross_loss if gross_loss > 0 else float("inf")
+
+    equity = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for v in values:
+        equity += v
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, peak - equity)
+
+    return {
+        "win_rate": win_rate,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "expectancy": expectancy,
+        "profit_factor": profit_factor,
+        "max_drawdown": max_drawdown,
+        "cumulative": equity,
+    }
+
+
+def report(trades: list[Trade], account_balance: float, risk_pct: float, spread_usd: float) -> None:
+    if not trades:
+        print("No trades were generated by the rule over this window.")
+        return
+
+    wins = [t for t in trades if t.outcome == "win"]
+    losses = [t for t in trades if t.outcome == "loss"]
+    risk_dollars = account_balance * (risk_pct / 100)
+
+    gross = _stats(trades, "r_multiple")
+    net = _stats(trades, "net_r_multiple")
+    net_wins = sum(1 for t in trades if t.net_r_multiple > 0)
+
+    print("=" * 62)
+    print("BACKTEST RESULTS -- src.advisor rule")
+    print(f"Trades: {len(trades)}  (spread modeled at ${spread_usd:.2f}/oz round trip)")
+    print("=" * 62)
+    print(f"{'':20}{'GROSS (no costs)':>20}{'NET (with spread)':>22}")
+    print(f"{'Win rate:':20}{gross['win_rate']:>19.1f}%{net_wins / len(trades) * 100:>21.1f}%")
+    print(f"{'Avg win:':20}{gross['avg_win']:>+19.2f}R{net['avg_win']:>+21.2f}R")
+    print(f"{'Avg loss:':20}{gross['avg_loss']:>+19.2f}R{net['avg_loss']:>+21.2f}R")
+    print(f"{'Expectancy/trade:':20}{gross['expectancy']:>+19.3f}R{net['expectancy']:>+21.3f}R")
+    print(f"{'Profit factor:':20}{gross['profit_factor']:>20.2f}{net['profit_factor']:>22.2f}")
+    print(f"{'Max drawdown:':20}{gross['max_drawdown']:>19.2f}R{net['max_drawdown']:>21.2f}R")
+    print(f"{'Cumulative:':20}{gross['cumulative']:>+19.2f}R{net['cumulative']:>+21.2f}R")
+    total_spread_cost_dollars = (gross["cumulative"] - net["cumulative"]) * risk_dollars
+
+    print("-" * 62)
+    print(f"Net cumulative in dollars (${risk_dollars:.2f} risked/trade, un-compounded): ${net['cumulative'] * risk_dollars:+.2f}")
+    print(f"Total spread cost paid, at actual (tiny) position sizes: ${total_spread_cost_dollars:,.2f}")
+    print("=" * 62)
+
+
+if __name__ == "__main__":
+    account_balance = 64.18
+    risk_pct = 0.5
+    spread_usd = 0.55
+    trades = run_backtest(account_balance=account_balance, risk_pct=risk_pct, spread_usd=spread_usd)
+    report(trades, account_balance=account_balance, risk_pct=risk_pct, spread_usd=spread_usd)

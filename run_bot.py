@@ -10,6 +10,7 @@ from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
 from src.market_data import get_gold_data
 from src.notifier import send_telegram
+from src.signal_tracker import SignalStats, get_signal_stats, log_signal, resolve_open_signals
 
 
 def _env_float(name: str, default: float) -> float:
@@ -26,12 +27,21 @@ def build_message(
     macro_bias: float,
     news_sentiment: float,
     effective_risk_pct: float,
+    signal_stats: SignalStats,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
         signal_line += " (downgraded from advisor by guardrails)"
 
     feasibility_line = "Feasible at current risk cap." if feasibility.tradable else f"Not feasible: {feasibility.reason}"
+
+    if signal_stats.resolved > 0:
+        track_record = (
+            f"Track record: {signal_stats.wins}W / {signal_stats.losses}L "
+            f"({signal_stats.win_rate:.1f}% win rate), {signal_stats.open_count} still open"
+        )
+    else:
+        track_record = f"Track record: no resolved signals yet ({signal_stats.open_count} open)"
 
     return (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
@@ -44,7 +54,8 @@ def build_message(
         f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
         f"Suggested Size: {advice.position_size_oz:,.2f} oz (rounded lots: {feasibility.rounded_lots:.3f})\n\n"
         f"Macro Bias: {macro_bias:+.1f} | News Sentiment: {news_sentiment:+.1f}\n"
-        f"{feasibility_line}\n\n"
+        f"{feasibility_line}\n"
+        f"{track_record}\n\n"
         f"<i>Educational use only, not financial advice. Confirm against your own analysis.</i>"
     )
 
@@ -130,6 +141,22 @@ def main() -> None:
 
     downgraded = execution_signal != advice.action
 
+    print("Resolving open tracked signals against fresh price data...")
+    resolve_open_signals()
+
+    if execution_signal in ("BUY", "SELL"):
+        log_signal(
+            now=now,
+            action=execution_signal,
+            entry=advice.entry,
+            stop=advice.stop_loss,
+            target=advice.take_profit,
+            confidence=advice.confidence,
+            trend=advice.trend,
+        )
+
+    signal_stats = get_signal_stats()
+
     message = build_message(
         now=now,
         execution_signal=execution_signal,
@@ -139,6 +166,7 @@ def main() -> None:
         macro_bias=macro_bias,
         news_sentiment=news_sentiment,
         effective_risk_pct=effective_risk_pct,
+        signal_stats=signal_stats,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
