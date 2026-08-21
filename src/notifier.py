@@ -26,3 +26,5 @@ def send_telegram(message: str) -> None:
         print("[notifier] Signal sent to Telegram.")
     except requests.exceptions.RequestException as exc:
         print(f"[notifier] Telegram send failed: {exc}")
+        if exc.response is not None:
+            print(f"[notifier] Telegram response body: {exc.response.text}")
