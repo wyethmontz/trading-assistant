@@ -3,6 +3,9 @@ name: Gold Signal Bot
 on:
   workflow_dispatch:  # triggered hourly by cron-job.org
 
+permissions:
+  contents: write  # needed to commit the updated signal log back to the repo
+
 jobs:
   send-signal:
     runs-on: ubuntu-latest
@@ -25,3 +28,11 @@ jobs:
           ACCOUNT_BALANCE: ${{ vars.ACCOUNT_BALANCE }}
           RISK_PCT: ${{ vars.RISK_PCT }}
         run: python run_bot.py
+
+      - name: Persist signal log
+        run: |
+          git config user.name "gold-signal-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/signal_log.csv
+          git diff --cached --quiet || git commit -m "chore: update signal log"
+          git push

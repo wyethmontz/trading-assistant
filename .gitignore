@@ -3,5 +3,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-data/
+data/*
+!data/signal_log.csv
 .env
