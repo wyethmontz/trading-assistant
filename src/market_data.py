@@ -29,11 +29,3 @@ def get_gold_data(period: str, interval: str) -> pd.DataFrame:
     columns = ["Open", "High", "Low", "Close", "Volume"]
     df = df[columns].dropna()
     return df
-
-
-def get_latest_price(interval: str = "1m") -> tuple[float, pd.Timestamp] | tuple[None, None]:
-    """Fetch the most recent close price for a low-latency price check (default 1m candles)."""
-    df = get_gold_data(period="1d", interval=interval)
-    if df.empty:
-        return None, None
-    return float(df["Close"].iloc[-1]), df.index[-1]

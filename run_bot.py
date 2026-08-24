@@ -8,35 +8,14 @@ from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
 from src.context_sources import get_external_gold_news, get_gold_news, get_macro_snapshot, score_gold_news_sentiment
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
-from src.market_data import get_gold_data, get_latest_price
+from src.market_data import get_gold_data
 from src.notifier import send_telegram
-from src.signal_tracker import get_latest_signal, log_signal, resolve_open_signals
+from src.signal_tracker import log_signal, resolve_open_signals
 
 
 def _env_float(name: str, default: float) -> float:
     value = os.environ.get(name, "")
     return float(value) if value else default
-
-
-def build_price_check_line(now: datetime, latest_signal: dict | None) -> str:
-    """One-line 'how's the last signal doing' check against a fast (1m) price poll.
-    Uses the PAXG-USD proxy, so it's a stand-in for XM's live price, not a tick feed."""
-    if latest_signal is None:
-        return ""
-
-    live_price, live_ts = get_latest_price(interval="1m")
-    if live_price is None:
-        return ""
-
-    entry = latest_signal["entry"]
-    diff = live_price - entry
-    diff_pct = diff / entry * 100
-    lag_min = (now - live_ts).total_seconds() / 60
-
-    return (
-        f"\nLatest signal price check: ${live_price:,.2f} ({diff:+.2f} / {diff_pct:+.2f}%) "
-        f"vs ${entry:,.2f} {latest_signal['action']} entry ({latest_signal['status']}, ~{lag_min:.0f}m delayed)"
-    )
 
 
 def build_message(
@@ -46,7 +25,6 @@ def build_message(
     advice,
     feasibility,
     effective_risk_pct: float,
-    price_check_line: str = "",
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -68,7 +46,6 @@ def build_message(
         f"TP - Entry: ${target_distance:,.2f}\n\n"
         f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
         f"Suggested Size: {advice.position_size_oz:,.2f} oz"
-        f"{price_check_line}"
     )
 
 
@@ -158,8 +135,6 @@ def main() -> None:
     print("Resolving open tracked signals against fresh price data...")
     resolve_open_signals()
 
-    previous_signal = get_latest_signal()
-
     if advice.action in ("BUY", "SELL"):
         log_signal(
             now=now,
@@ -172,8 +147,6 @@ def main() -> None:
             actionable=(execution_signal == advice.action),
         )
 
-    price_check_line = build_price_check_line(now, previous_signal)
-
     message = build_message(
         now=now,
         execution_signal=execution_signal,
@@ -181,7 +154,6 @@ def main() -> None:
         advice=advice,
         feasibility=feasibility,
         effective_risk_pct=effective_risk_pct,
-        price_check_line=price_check_line,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
