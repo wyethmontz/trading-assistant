@@ -50,6 +50,8 @@ def build_message(
         track_record = f"Track record: no resolved signals yet ({signal_stats.open_count} open)"
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal in ("BUY", "SELL") else "Entry"
+    stop_distance = abs(advice.entry - advice.stop_loss)
+    target_distance = abs(advice.take_profit - advice.entry)
 
     return (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
@@ -59,7 +61,9 @@ def build_message(
         f"Lot(s): {feasibility.rounded_lots:.3f}\n"
         f"{price_label}: ${advice.entry:,.2f}\n"
         f"Take Profit Level: ${advice.take_profit:,.2f}\n"
-        f"Stop Loss Level: ${advice.stop_loss:,.2f}\n\n"
+        f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
+        f"Entry - SL: ${stop_distance:,.2f}\n"
+        f"TP - Entry: ${target_distance:,.2f}\n\n"
         f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
         f"Suggested Size: {advice.position_size_oz:,.2f} oz\n\n"
         f"Macro Bias: {macro_bias:+.1f} | News Sentiment: {news_sentiment:+.1f}\n"
