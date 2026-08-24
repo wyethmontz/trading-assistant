@@ -10,7 +10,7 @@ from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
 from src.market_data import get_gold_data
 from src.notifier import send_telegram
-from src.signal_tracker import SignalStats, get_signal_stats, log_signal, resolve_open_signals
+from src.signal_tracker import log_signal, resolve_open_signals
 
 
 def _env_float(name: str, default: float) -> float:
@@ -24,30 +24,11 @@ def build_message(
     downgraded: bool,
     advice,
     feasibility,
-    macro_bias: float,
-    news_sentiment: float,
     effective_risk_pct: float,
-    signal_stats: SignalStats,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
         signal_line += " (downgraded from advisor by guardrails)"
-
-    feasibility_line = "Feasible at current risk cap." if feasibility.tradable else f"Not feasible: {feasibility.reason}"
-
-    if signal_stats.resolved > 0:
-        track_record = (
-            f"Track record (all rule calls): {signal_stats.wins}W / {signal_stats.losses}L "
-            f"({signal_stats.win_rate:.1f}% win rate), {signal_stats.open_count} still open"
-        )
-        if signal_stats.actionable_resolved > 0:
-            track_record += (
-                f"\nOf those, actually tradable at your account size: {signal_stats.actionable_wins}W / "
-                f"{signal_stats.actionable_resolved - signal_stats.actionable_wins}L "
-                f"({signal_stats.actionable_win_rate:.1f}% win rate)"
-            )
-    else:
-        track_record = f"Track record: no resolved signals yet ({signal_stats.open_count} open)"
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal in ("BUY", "SELL") else "Entry"
     stop_distance = abs(advice.entry - advice.stop_loss)
@@ -65,11 +46,7 @@ def build_message(
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n\n"
         f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
-        f"Suggested Size: {advice.position_size_oz:,.2f} oz\n\n"
-        f"Macro Bias: {macro_bias:+.1f} | News Sentiment: {news_sentiment:+.1f}\n"
-        f"{feasibility_line}\n"
-        f"{track_record}\n\n"
-        f"<i>Educational use only, not financial advice. Confirm against your own analysis.</i>"
+        f"Suggested Size: {advice.position_size_oz:,.2f} oz"
     )
 
 
@@ -171,18 +148,13 @@ def main() -> None:
             actionable=(execution_signal == advice.action),
         )
 
-    signal_stats = get_signal_stats()
-
     message = build_message(
         now=now,
         execution_signal=execution_signal,
         downgraded=downgraded,
         advice=advice,
         feasibility=feasibility,
-        macro_bias=macro_bias,
-        news_sentiment=news_sentiment,
         effective_risk_pct=effective_risk_pct,
-        signal_stats=signal_stats,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
