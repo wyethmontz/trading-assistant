@@ -36,8 +36,8 @@ def load_signal_log() -> pd.DataFrame:
     _ensure_log_file()
     df = pd.read_csv(SIGNAL_LOG_PATH)
     if not df.empty:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-        df["resolved_at"] = pd.to_datetime(df["resolved_at"], utc=True, errors="coerce")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, format="ISO8601", errors="coerce")
+        df["resolved_at"] = pd.to_datetime(df["resolved_at"], utc=True, format="ISO8601", errors="coerce")
     return df
 
 
@@ -119,6 +119,8 @@ def resolve_open_signals() -> None:
         changed = True
 
     if changed:
+        df["timestamp"] = df["timestamp"].apply(lambda t: t.isoformat() if pd.notna(t) else "")
+        df["resolved_at"] = df["resolved_at"].apply(lambda t: t.isoformat() if pd.notna(t) else "")
         df.to_csv(SIGNAL_LOG_PATH, index=False)
 
 
