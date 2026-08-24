@@ -192,10 +192,7 @@ def main() -> None:
         print(message.encode("ascii", errors="replace").decode("ascii"))
     print("-----------------------\n")
 
-    if execution_signal == "WAIT":
-        print("[run_bot] Signal is WAIT, skipping Telegram send.")
-    else:
-        send_telegram(message)
+    send_telegram(message)
 
 
 if __name__ == "__main__":
