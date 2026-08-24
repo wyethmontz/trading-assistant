@@ -88,8 +88,10 @@ def main() -> None:
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
 
-    print("Fetching gold data (Swing 1h)...")
-    raw_df = get_gold_data(period="1mo", interval="1h")
+    signal_interval = os.environ.get("SIGNAL_INTERVAL", "15m")
+
+    print(f"Fetching gold data ({signal_interval} candles)...")
+    raw_df = get_gold_data(period="1mo", interval=signal_interval)
     if raw_df.empty:
         print("No market data returned, aborting run.")
         return
