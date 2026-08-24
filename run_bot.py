@@ -185,7 +185,7 @@ def main() -> None:
 
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
-    distance_ok = stop_distance >= 20 or target_distance >= 40
+    distance_ok = stop_distance >= 20 or target_distance >= 20
 
     if execution_signal == "WAIT":
         print("[run_bot] Signal is WAIT, skipping Telegram send.")
