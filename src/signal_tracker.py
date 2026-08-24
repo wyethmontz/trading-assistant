@@ -75,6 +75,20 @@ def log_signal(
     df.to_csv(SIGNAL_LOG_PATH, index=False)
 
 
+def get_latest_signal() -> dict | None:
+    """Return the most recently logged signal (any status), for live price-check comparisons."""
+    df = load_signal_log()
+    if df.empty:
+        return None
+    last = df.iloc[-1]
+    return {
+        "timestamp": last["timestamp"],
+        "action": last["action"],
+        "entry": float(last["entry"]),
+        "status": last["status"],
+    }
+
+
 def resolve_open_signals() -> None:
     """Check open signals against price history since they were logged; mark win/loss if stop or target was hit."""
     df = load_signal_log()
