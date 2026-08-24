@@ -85,8 +85,8 @@ def resolve_open_signals() -> None:
     if not open_mask.any():
         return
 
-    signal_interval = os.environ.get("SIGNAL_INTERVAL", "15m")
-    price_df = get_gold_data(period="60d", interval=signal_interval)
+    signal_interval = os.environ.get("SIGNAL_INTERVAL", "1h")
+    price_df = get_gold_data(period="3mo", interval=signal_interval)
     if price_df.empty:
         return
 
