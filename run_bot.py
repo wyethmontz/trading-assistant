@@ -31,6 +31,7 @@ def build_message(
         signal_line += " (downgraded from advisor by guardrails)"
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal in ("BUY", "SELL") else "Entry"
+    display_entry = advice.entry + 3 if execution_signal == "BUY" else advice.entry
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
 
@@ -39,7 +40,7 @@ def build_message(
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {feasibility.rounded_lots:.3f}\n"
-        f"{price_label}: ${advice.entry:,.2f}\n"
+        f"{price_label}: ${display_entry:,.2f}\n"
         f"Take Profit Level: ${advice.take_profit:,.2f}\n"
         f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
