@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -85,8 +84,7 @@ def resolve_open_signals() -> None:
     if not open_mask.any():
         return
 
-    signal_interval = os.environ.get("SIGNAL_INTERVAL", "15m")
-    price_df = get_gold_data(period="60d", interval=signal_interval)
+    price_df = get_gold_data(period="3mo", interval="1h")
     if price_df.empty:
         return
 
