@@ -2,6 +2,8 @@ name: Gold Signal Bot
 
 on:
   workflow_dispatch:  # triggered hourly by cron-job.org
+  push:
+    branches: [main]
 
 permissions:
   contents: write  # needed to commit the updated signal log back to the repo
