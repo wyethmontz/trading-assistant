@@ -37,8 +37,7 @@ def build_message(
     return (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
         f"{signal_line}\n"
-        f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n"
-        f"{advice.notes}\n\n"
+        f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {feasibility.rounded_lots:.3f}\n"
         f"{price_label}: ${advice.entry:,.2f}\n"
         f"Take Profit Level: ${advice.take_profit:,.2f}\n"
