@@ -30,7 +30,14 @@ def build_message(
     if downgraded:
         signal_line += " (downgraded from advisor by guardrails)"
 
-    price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal in ("BUY", "SELL") else "Entry"
+    if execution_signal == "WAIT":
+        return (
+            f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
+            f"{signal_line}\n"
+            f"Trend: {advice.trend} | Confidence: {advice.confidence}%"
+        )
+
+    price_label = f"{execution_signal.capitalize()} When Price is"
     display_entry = advice.entry + 3 if execution_signal == "BUY" else advice.entry
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
