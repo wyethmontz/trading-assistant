@@ -161,7 +161,7 @@ def main() -> None:
         print(message.encode("ascii", errors="replace").decode("ascii"))
     print("-----------------------\n")
 
-    include_wait = os.environ.get("INCLUDE_WAIT_SIGNALS", "false").lower() == "true"
+    include_wait = os.environ.get("INCLUDE_WAIT_SIGNALS", "true").lower() == "true"
     if execution_signal == "WAIT" and not include_wait:
         print("[run_bot] Signal is WAIT, skipping Telegram send.")
     else:
