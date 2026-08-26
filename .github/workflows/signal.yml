@@ -27,8 +27,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           ACCOUNT_BALANCE: ${{ secrets.ACCOUNT_BALANCE }}
           RISK_PCT: ${{ secrets.RISK_PCT }}
-          ONLY_SEND_BUY: ${{ vars.ONLY_SEND_BUY || secrets.ONLY_SEND_BUY }}
-          INCLUDE_WAIT_SIGNALS: ${{ vars.INCLUDE_WAIT_SIGNALS || secrets.INCLUDE_WAIT_SIGNALS }}
+          ONLY_SEND_BUY: ${{ vars.ONLY_SEND_BUY || secrets.ONLY_SEND_BUY || 'true' }}
         run: python run_bot.py
 
       - name: Persist signal log
