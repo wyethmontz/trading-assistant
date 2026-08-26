@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,20 @@ def log_signal(
     guardrails (feasibility/confidence/adaptive), so we can learn if the rule
     itself is right even during stretches where nothing is tradable yet."""
     _ensure_log_file()
+    df = pd.read_csv(SIGNAL_LOG_PATH)
+
+    if not df.empty:
+        last = df.iloc[-1]
+        same_open_signal = (
+            last["status"] == "open"
+            and last["action"] == action
+            and math.isclose(last["entry"], entry, rel_tol=1e-9)
+            and math.isclose(last["stop"], stop, rel_tol=1e-9)
+            and math.isclose(last["target"], target, rel_tol=1e-9)
+        )
+        if same_open_signal:
+            return
+
     row = {
         "timestamp": now.isoformat(),
         "action": action,
@@ -69,7 +84,6 @@ def log_signal(
         "resolved_at": "",
         "resolved_price": "",
     }
-    df = pd.read_csv(SIGNAL_LOG_PATH)
     df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
     df.to_csv(SIGNAL_LOG_PATH, index=False)
 
