@@ -38,18 +38,6 @@ def build_message(
         )
 
     price_label = f"{execution_signal.capitalize()} When Price is"
-    if execution_signal == "BUY":
-        display_entry = advice.entry + 3
-        display_stop = advice.stop_loss
-        display_target = advice.take_profit
-    elif execution_signal == "SELL":
-        display_entry = advice.entry + 9.5
-        display_stop = advice.stop_loss + 9.5
-        display_target = advice.take_profit + 9.5
-    else:
-        display_entry = advice.entry
-        display_stop = advice.stop_loss
-        display_target = advice.take_profit
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
     display_lots = feasibility.rounded_lots / 2 if execution_signal == "SELL" else feasibility.rounded_lots
@@ -59,9 +47,9 @@ def build_message(
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {display_lots:.3f}\n"
-        f"{price_label}: ${display_entry:,.2f}\n"
-        f"Take Profit Level: ${display_target:,.2f}\n"
-        f"Stop Loss Level: ${display_stop:,.2f}\n"
+        f"{price_label}: ${advice.entry:,.2f}\n"
+        f"Take Profit Level: ${advice.take_profit:,.2f}\n"
+        f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n\n"
         f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
