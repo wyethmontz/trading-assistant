@@ -4,9 +4,10 @@ import pandas as pd
 import yfinance as yf
 
 
-GOLD_SYMBOL = "PAXG-USD"  # PAX Gold: token backed 1:1 by physical gold, trades 24/7.
-# Tracks spot/CFD gold (e.g. XM's XAUUSD) far more closely than GC=F futures,
-# which can drift ~$50-60 away from spot due to contract roll and session gaps.
+GOLD_SYMBOL = "XAUUSD=X"  # Yahoo's gold spot (XAU/USD) ticker, matches broker quotes
+# (e.g. XM's XAUUSD) far more closely than PAXG-USD, whose price can drift from
+# spot since it trades as a crypto token with its own supply/demand, or GC=F
+# futures, which can drift ~$50-60 away from spot due to contract roll and gaps.
 
 
 def get_gold_data(period: str, interval: str) -> pd.DataFrame:
