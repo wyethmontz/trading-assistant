@@ -92,6 +92,8 @@ python run_bot.py
 | `CONFIDENCE_FLOOR` | Minimum confidence to act on a signal | `65` |
 | `ADAPTIVE_MODE` | Tighten risk/confidence after a loss streak | `true` |
 | `XM_SYMBOL`, `CONTRACT_SIZE`, `MIN_LOT`, `LOT_STEP`, `MAX_LOT`, `SPREAD_USD` | Broker guardrail specs | match XM defaults in `app.py` |
+| `ONLY_SEND_BUY` | Only send a Telegram message when the signal is `BUY` (skips `SELL` and `WAIT`). Set to `false` to receive all signals again. | `true` |
+| `INCLUDE_WAIT_SIGNALS` | When `ONLY_SEND_BUY` is `false`, whether to also send `WAIT` signals | `true` |
 
 ### Automated schedule
 
