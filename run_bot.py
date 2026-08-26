@@ -38,15 +38,21 @@ def build_message(
         )
 
     price_label = f"{execution_signal.capitalize()} When Price is"
-    display_entry = advice.entry + 3 if execution_signal == "BUY" else advice.entry
+    if execution_signal == "BUY":
+        display_entry = advice.entry + 3
+    elif execution_signal == "SELL":
+        display_entry = advice.entry + 7.5
+    else:
+        display_entry = advice.entry
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
+    display_lots = feasibility.rounded_lots / 2 if execution_signal == "SELL" else feasibility.rounded_lots
 
     return (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
-        f"Lot(s): {feasibility.rounded_lots:.3f}\n"
+        f"Lot(s): {display_lots:.3f}\n"
         f"{price_label}: ${display_entry:,.2f}\n"
         f"Take Profit Level: ${advice.take_profit:,.2f}\n"
         f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
