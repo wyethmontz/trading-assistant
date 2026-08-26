@@ -41,7 +41,7 @@ def build_message(
     if execution_signal == "BUY":
         display_entry = advice.entry + 3
     elif execution_signal == "SELL":
-        display_entry = advice.entry + 7.5
+        display_entry = advice.entry + 9.5
     else:
         display_entry = advice.entry
     stop_distance = abs(advice.entry - advice.stop_loss)
