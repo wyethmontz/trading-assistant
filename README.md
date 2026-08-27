@@ -89,7 +89,7 @@ python run_bot.py
 | `TELEGRAM_CHAT_ID` | Target chat/channel id | required to send |
 | `ACCOUNT_BALANCE` | Account balance in USD | `64.18` |
 | `RISK_PCT` | Risk per trade (%) | `0.5` |
-| `CONFIDENCE_FLOOR` | Minimum confidence to act on a signal | `65` |
+| `CONFIDENCE_FLOOR` | Minimum confidence to act on a signal | `60` |
 | `ADAPTIVE_MODE` | Tighten risk/confidence after a loss streak | `true` |
 | `XM_SYMBOL`, `CONTRACT_SIZE`, `MIN_LOT`, `LOT_STEP`, `MAX_LOT`, `SPREAD_USD` | Broker guardrail specs | match XM defaults in `app.py` |
 | `ONLY_SEND_BUY` | Only send a Telegram message when the signal is `BUY` (skips `SELL` and `WAIT`). Set to `false` to receive all signals again. | `true` |

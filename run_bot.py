@@ -63,7 +63,7 @@ def main() -> None:
 
     account_balance = _env_float("ACCOUNT_BALANCE", 64.18)
     risk_pct = _env_float("RISK_PCT", 0.5)
-    confidence_floor = _env_float("CONFIDENCE_FLOOR", 65)
+    confidence_floor = _env_float("CONFIDENCE_FLOOR", 60)
     adaptive_mode = os.environ.get("ADAPTIVE_MODE", "true").lower() != "false"
 
     xm_symbol = os.environ.get("XM_SYMBOL", "XAUUSD")
