@@ -38,7 +38,7 @@ def build_message(
         )
 
     price_label = f"{execution_signal.capitalize()} When Price is"
-    display_entry = advice.entry + 3 if execution_signal == "BUY" else advice.entry
+    display_entry = advice.entry + 3 if execution_signal in ("BUY", "SELL") else advice.entry
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
     display_lots = feasibility.rounded_lots / 2 if execution_signal == "SELL" else feasibility.rounded_lots
