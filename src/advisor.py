@@ -70,10 +70,10 @@ def build_advice(df: pd.DataFrame, account_balance: float, risk_pct: float) -> A
         action = "SELL"
         notes = "Trend and momentum support a short setup."
 
-    if action == "BUY":
+    if action == "BUY" or (action == "WAIT" and trend == "Bullish"):
         stop = close - (1.5 * atr)
         target = close + (3.0 * atr)
-    elif action == "SELL":
+    elif action == "SELL" or (action == "WAIT" and trend == "Bearish"):
         stop = close + (1.5 * atr)
         target = close - (3.0 * atr)
     else:

@@ -34,7 +34,8 @@ def build_message(
     display_entry = advice.entry + 3
     stop_distance = abs(advice.entry - advice.stop_loss)
     target_distance = abs(advice.take_profit - advice.entry)
-    display_lots = feasibility.rounded_lots / 2 if execution_signal == "SELL" else feasibility.rounded_lots
+    is_sell_like = execution_signal == "SELL" or (execution_signal == "WAIT" and advice.trend == "Bearish")
+    display_lots = feasibility.rounded_lots / 2 if is_sell_like else feasibility.rounded_lots
 
     return (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
