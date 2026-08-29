@@ -86,6 +86,7 @@ with st.sidebar:
     lot_step = st.number_input("Lot Step", min_value=0.001, value=0.01, step=0.001, format="%.3f")
     max_lot = st.number_input("Maximum Lot", min_value=0.01, value=50.0, step=0.01)
     spread_usd = st.number_input("Estimated Spread (USD)", min_value=0.0, value=0.5, step=0.1)
+    entry_buffer = st.number_input("Entry Buffer (USD)", min_value=0.0, value=3.0, step=0.5)
 
 mode_map = {
     "Scalp (1m)": ("1d", "1m"),
@@ -134,12 +135,17 @@ spec = BrokerSpec(
     max_lot=max_lot,
     spread_usd=spread_usd,
 )
+is_sell_like = advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish")
+sizing_risk_pct = effective_risk_pct * 0.5 if is_sell_like else effective_risk_pct
+effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
+
 feasibility = evaluate_trade_feasibility(
     account_balance=account_balance,
-    risk_pct=effective_risk_pct,
-    entry=advice.entry,
+    risk_pct=sizing_risk_pct,
+    entry=effective_entry,
     stop=advice.stop_loss,
     spec=spec,
+    max_risk_pct=effective_risk_pct,
 )
 
 col1, col2, col3, col4 = st.columns(4)
@@ -206,17 +212,23 @@ with right:
     if execution_signal != advice.action:
         st.warning("Signal downgraded to WAIT by adaptive guardrails (risk/confidence/source alignment).")
     st.write(advice.notes)
-    st.write(f"Entry: ${advice.entry:,.2f}")
+    st.write(f"Entry (worked at, incl. ${entry_buffer:,.2f} buffer): ${effective_entry:,.2f}")
     st.write(f"Stop Loss: ${advice.stop_loss:,.2f}")
     st.write(f"Take Profit: ${advice.take_profit:,.2f}")
-    st.write(f"Risk Amount: ${advice.risk_amount:,.2f}")
-    st.write(f"Suggested Size: {advice.position_size_oz:,.2f} oz")
+    st.write(f"Lot(s): {feasibility.rounded_lots:.2f}")
+    st.write(f"Suggested Size: {feasibility.rounded_lots * contract_size:,.2f} oz")
+    if feasibility.tradable:
+        st.write(f"Risk: ${feasibility.effective_risk_usd:,.2f} ({feasibility.effective_risk_pct:.2f}%)")
+    else:
+        st.write(f"Risk: not placeable — {feasibility.reason}")
+    if feasibility.note:
+        st.caption(feasibility.note)
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.subheader("XM Execution Feasibility")
 fx1, fx2, fx3, fx4 = st.columns(4)
-fx1.metric("Effective Risk %", f"{effective_risk_pct:.2f}%")
-fx2.metric("Rounded Lot Size", f"{feasibility.rounded_lots:.3f}")
+fx1.metric("Sizing Risk % (post half-size)", f"{sizing_risk_pct:.2f}%")
+fx2.metric("Rounded Lot Size", f"{feasibility.rounded_lots:.2f}")
 fx3.metric("Effective Risk ($)", f"${feasibility.effective_risk_usd:,.2f}")
 fx4.metric("Effective Risk (%)", f"{feasibility.effective_risk_pct:.2f}%")
 
@@ -283,11 +295,11 @@ with st.form("trade_log_form"):
                 "symbol": xm_symbol,
                 "mode": mode,
                 "signal": execution_signal,
-                "entry": advice.entry,
+                "entry": effective_entry,
                 "stop_loss": advice.stop_loss,
                 "take_profit": advice.take_profit,
                 "suggested_lots": feasibility.rounded_lots,
-                "risk_pct": effective_risk_pct,
+                "risk_pct": feasibility.effective_risk_pct,
                 "macro_bias": macro_bias,
                 "news_sentiment": news_sentiment,
                 "confidence": advice.confidence,

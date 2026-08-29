@@ -24,32 +24,45 @@ def build_message(
     downgraded: bool,
     advice,
     feasibility,
-    effective_risk_pct: float,
+    effective_entry: float,
+    contract_size_oz_per_lot: float,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
         signal_line += " (downgraded from advisor by guardrails)"
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
-    display_entry = advice.entry + 3
-    stop_distance = abs(advice.entry - advice.stop_loss)
-    target_distance = abs(advice.take_profit - advice.entry)
-    is_sell_like = execution_signal == "SELL" or (execution_signal == "WAIT" and advice.trend == "Bearish")
-    display_lots = feasibility.rounded_lots / 2 if is_sell_like else feasibility.rounded_lots
 
-    return (
+    # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
+    # Every derived number below is measured from it, and the position size / risk were
+    # sized off it too, so the whole message describes one coherent trade.
+    stop_distance = abs(effective_entry - advice.stop_loss)
+    target_distance = abs(advice.take_profit - effective_entry)
+
+    lots = feasibility.rounded_lots
+    size_oz = lots * contract_size_oz_per_lot
+
+    if feasibility.tradable:
+        risk_line = f"Risk: ${feasibility.effective_risk_usd:,.2f} ({feasibility.effective_risk_pct:.2f}%)"
+    else:
+        risk_line = f"Not placeable within risk cap — {feasibility.reason}"
+
+    message = (
         f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
-        f"Lot(s): {display_lots:.3f}\n"
-        f"{price_label}: ${display_entry:,.2f}\n"
+        f"Lot(s): {lots:.2f}\n"
+        f"{price_label}: ${effective_entry:,.2f}\n"
         f"Take Profit Level: ${advice.take_profit:,.2f}\n"
         f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n\n"
-        f"Risk: ${advice.risk_amount:,.2f} ({effective_risk_pct:.2f}%)\n"
-        f"Suggested Size: {advice.position_size_oz:,.2f} oz"
+        f"{risk_line}\n"
+        f"Suggested Size: {size_oz:,.2f} oz"
     )
+    if feasibility.note:
+        message += f"\nNote: {feasibility.note}"
+    return message
 
 
 def main() -> None:
@@ -66,6 +79,7 @@ def main() -> None:
     lot_step = _env_float("LOT_STEP", 0.01)
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
+    entry_buffer = _env_float("ENTRY_BUFFER_USD", 3.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -108,12 +122,23 @@ def main() -> None:
         max_lot=max_lot,
         spread_usd=spread_usd,
     )
+
+    # Shorts (and bearish WAITs) are sized at half risk. Apply it to the risk budget
+    # *before* sizing so lots, oz and $ risk in the message all describe one position.
+    is_sell_like = advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish")
+    sizing_risk_pct = effective_risk_pct * 0.5 if is_sell_like else effective_risk_pct
+
+    # The order is worked `entry_buffer` above the advisor close (both directions, per
+    # the tuned config). Distances, sizing and the logged signal all use this same price.
+    effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
+
     feasibility = evaluate_trade_feasibility(
         account_balance=account_balance,
-        risk_pct=effective_risk_pct,
-        entry=advice.entry,
+        risk_pct=sizing_risk_pct,
+        entry=effective_entry,
         stop=advice.stop_loss,
         spec=spec,
+        max_risk_pct=effective_risk_pct,
     )
 
     source_alignment = True
@@ -140,7 +165,7 @@ def main() -> None:
         log_signal(
             now=now,
             action=advice.action,
-            entry=advice.entry,
+            entry=effective_entry,
             stop=advice.stop_loss,
             target=advice.take_profit,
             confidence=advice.confidence,
@@ -154,7 +179,8 @@ def main() -> None:
         downgraded=downgraded,
         advice=advice,
         feasibility=feasibility,
-        effective_risk_pct=effective_risk_pct,
+        effective_entry=effective_entry,
+        contract_size_oz_per_lot=contract_size,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
