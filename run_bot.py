@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from src.advisor import build_advice
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
@@ -47,8 +47,10 @@ def build_message(
     else:
         risk_line = f"Not placeable within risk cap — {feasibility.reason}"
 
+    display_time = now + timedelta(hours=3)
+
     message = (
-        f"<b>Gold Signal — {now.strftime('%Y-%m-%d %H:%M UTC')}</b>\n\n"
+        f"<b>Gold Signal — {display_time.strftime('%Y-%m-%d %H:%M')} UTC+3</b>\n\n"
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {lots:.2f}\n"
