@@ -29,7 +29,7 @@ jobs:
           RISK_PCT: ${{ secrets.RISK_PCT }}
           ONLY_SEND_BUY: ${{ vars.ONLY_SEND_BUY || secrets.ONLY_SEND_BUY || 'true' }}
           CONFIDENCE_FLOOR: ${{ vars.CONFIDENCE_FLOOR || '65' }}
-          ENTRY_BUFFER_USD: ${{ vars.ENTRY_BUFFER_USD || '3' }}
+          ENTRY_BUFFER_USD: ${{ vars.ENTRY_BUFFER_USD || '0' }}
         run: python run_bot.py
 
       - name: Persist signal log

@@ -79,7 +79,7 @@ def main() -> None:
     lot_step = _env_float("LOT_STEP", 0.01)
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
-    entry_buffer = _env_float("ENTRY_BUFFER_USD", 3.0)
+    entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
