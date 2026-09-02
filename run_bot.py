@@ -26,6 +26,7 @@ def build_message(
     feasibility,
     effective_entry: float,
     contract_size_oz_per_lot: float,
+    sell_take_profit_buffer: float = 0.0,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -33,11 +34,15 @@ def build_message(
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
 
+    # For SELL, the displayed Take Profit is nudged up by `sell_take_profit_buffer`
+    # (a less aggressive target); BUY and WAIT are unaffected.
+    display_take_profit = advice.take_profit + sell_take_profit_buffer if execution_signal == "SELL" else advice.take_profit
+
     # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
     # Every derived number below is measured from it, and the position size / risk were
     # sized off it too, so the whole message describes one coherent trade.
     stop_distance = abs(effective_entry - advice.stop_loss)
-    target_distance = abs(advice.take_profit - effective_entry)
+    target_distance = abs(display_take_profit - effective_entry)
 
     lots = feasibility.rounded_lots
     size_oz = lots * contract_size_oz_per_lot
@@ -55,7 +60,7 @@ def build_message(
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {lots:.2f}\n"
         f"{price_label}: ${effective_entry:,.2f}\n"
-        f"Take Profit Level: ${advice.take_profit:,.2f}\n"
+        f"Take Profit Level: ${display_take_profit:,.2f}\n"
         f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n\n"
@@ -82,6 +87,7 @@ def main() -> None:
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
     entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
+    sell_take_profit_buffer = _env_float("SELL_TAKE_PROFIT_BUFFER_USD", 30.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -183,6 +189,7 @@ def main() -> None:
         feasibility=feasibility,
         effective_entry=effective_entry,
         contract_size_oz_per_lot=contract_size,
+        sell_take_profit_buffer=sell_take_profit_buffer,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
