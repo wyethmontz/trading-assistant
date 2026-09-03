@@ -87,7 +87,6 @@ def main() -> None:
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
     entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
-    buy_entry_buffer = _env_float("BUY_ENTRY_BUFFER_USD", -8.0)
     sell_take_profit_buffer = _env_float("SELL_TAKE_PROFIT_BUFFER_USD", 30.0)
 
     print("Fetching gold data (Swing 1h)...")
@@ -137,15 +136,9 @@ def main() -> None:
     is_sell_like = advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish")
     sizing_risk_pct = effective_risk_pct * 0.5 if is_sell_like else effective_risk_pct
 
-    # BUY uses its own entry buffer (default -8, i.e. worked below the advisor close);
-    # SELL/WAIT use the general `entry_buffer`. Distances, sizing and the logged signal
-    # all use this same price.
-    if advice.entry <= 0:
-        effective_entry = advice.entry
-    elif advice.action == "BUY":
-        effective_entry = advice.entry + buy_entry_buffer
-    else:
-        effective_entry = advice.entry + entry_buffer
+    # The order is worked `entry_buffer` above the advisor close (both directions, per
+    # the tuned config). Distances, sizing and the logged signal all use this same price.
+    effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
 
     feasibility = evaluate_trade_feasibility(
         account_balance=account_balance,
