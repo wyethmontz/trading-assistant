@@ -91,6 +91,85 @@ def _round_numbers_straddling(price: float) -> tuple[float, float]:
     return round(below, 2), round(above, 2)
 
 
+def _named_levels(key_levels: KeyLevels) -> list[tuple[str, float]]:
+    pairs = [
+        ("Swing High", key_levels.swing_high),
+        ("Swing Low", key_levels.swing_low),
+        ("Prior Day High", key_levels.prior_day_high),
+        ("Prior Day Low", key_levels.prior_day_low),
+        ("Prior Week High", key_levels.prior_week_high),
+        ("Prior Week Low", key_levels.prior_week_low),
+        ("Round Number Above", key_levels.round_number_above),
+        ("Round Number Below", key_levels.round_number_below),
+    ]
+    return [(name, value) for name, value in pairs if value is not None]
+
+
+def pull_stop_loss_to_key_level(
+    direction: str,
+    entry: float,
+    stop_loss: float,
+    key_levels: KeyLevels,
+    margin: float = 0.01,
+) -> tuple[float, str | None]:
+    """Tighten `stop_loss` toward entry, to just beyond the nearest key level sitting
+    between them, if one exists -- cutting the loss at the point the setup is already
+    invalidated instead of waiting for the full stop distance. Only ever tightens
+    (moves the stop closer to entry), never widens, and never touches entry itself.
+    Returns (adjusted_stop_loss, note) where note is None if nothing changed.
+    """
+    levels = _named_levels(key_levels)
+
+    if direction == "SELL":
+        candidates = [(name, value) for name, value in levels if entry < value < stop_loss]
+        if not candidates:
+            return stop_loss, None
+        name, level = min(candidates, key=lambda item: item[1])  # nearest to entry
+        new_stop_loss = level + margin
+    else:
+        candidates = [(name, value) for name, value in levels if stop_loss < value < entry]
+        if not candidates:
+            return stop_loss, None
+        name, level = max(candidates, key=lambda item: item[1])  # nearest to entry
+        new_stop_loss = level - margin
+
+    note = f"Stop Loss tightened to ${new_stop_loss:,.2f} (was ${stop_loss:,.2f}) — {name} at ${level:,.2f} sits closer"
+    return new_stop_loss, note
+
+
+def pull_take_profit_to_key_level(
+    direction: str,
+    entry: float,
+    take_profit: float,
+    key_levels: KeyLevels,
+    margin: float = 0.01,
+) -> tuple[float, str | None]:
+    """Pull `take_profit` toward entry, to just before the nearest key level sitting
+    between them, if one exists -- that level is a realistic place for price to stall,
+    so treating it as the target is more achievable than assuming a clean break past
+    it. Only ever pulls in (moves the target closer to entry), never extends further
+    out, and never touches entry itself.
+    Returns (adjusted_take_profit, note) where note is None if nothing changed.
+    """
+    levels = _named_levels(key_levels)
+
+    if direction == "SELL":
+        candidates = [(name, value) for name, value in levels if take_profit < value < entry]
+        if not candidates:
+            return take_profit, None
+        name, level = max(candidates, key=lambda item: item[1])  # nearest to entry
+        new_take_profit = level + margin
+    else:
+        candidates = [(name, value) for name, value in levels if entry < value < take_profit]
+        if not candidates:
+            return take_profit, None
+        name, level = min(candidates, key=lambda item: item[1])  # nearest to entry
+        new_take_profit = level - margin
+
+    note = f"Take Profit pulled to ${new_take_profit:,.2f} (was ${take_profit:,.2f}) — {name} at ${level:,.2f} sits in the way"
+    return new_take_profit, note
+
+
 def compute_key_levels(df: pd.DataFrame, current_price: float, swing_lookback: int = 5) -> KeyLevels:
     """Compute all key levels from OHLC history. Gracefully omits (None) any level
     that can't be computed from the available candle history."""
