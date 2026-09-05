@@ -93,7 +93,7 @@ def main() -> None:
     entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
     sell_take_profit_buffer = _env_float("SELL_TAKE_PROFIT_BUFFER_USD", 30.0)
     economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
-    news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 60.0)
+    news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
 
     print("Fetching gold data (Swing 1h)...")
