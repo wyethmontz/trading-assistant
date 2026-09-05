@@ -9,6 +9,8 @@ from src.key_levels import (
     _round_numbers_straddling,
     _round_step,
     compute_key_levels,
+    pull_stop_loss_to_key_level,
+    pull_take_profit_to_key_level,
 )
 
 
@@ -177,3 +179,92 @@ def test_compute_key_levels_with_enough_history_fills_everything():
     assert levels.prior_day_low is not None
     assert levels.prior_week_high is not None
     assert levels.prior_week_low is not None
+
+
+# --- Pull stop-loss / take-profit toward entry, using key levels -------------
+
+
+def _levels(**kwargs) -> KeyLevels:
+    return KeyLevels(**kwargs)
+
+
+def test_pull_stop_loss_tightens_for_sell_when_level_is_in_the_way():
+    # SELL: entry=100, raw stop=120, a resistance level sits at 110 -- tighten to 110.01.
+    new_sl, note = pull_stop_loss_to_key_level("SELL", entry=100.0, stop_loss=120.0, key_levels=_levels(swing_high=110.0))
+    assert new_sl == 110.01
+    assert note is not None
+    assert "Swing High" in note
+
+
+def test_pull_stop_loss_picks_nearest_to_entry_among_multiple_levels():
+    # Two levels between entry and stop (105 and 110) -- must pick 105 (nearest to entry).
+    new_sl, note = pull_stop_loss_to_key_level(
+        "SELL", entry=100.0, stop_loss=120.0, key_levels=_levels(swing_high=110.0, round_number_above=105.0)
+    )
+    assert new_sl == 105.01
+    assert "Round Number Above" in note
+
+
+def test_pull_stop_loss_no_op_when_no_level_in_the_way():
+    new_sl, note = pull_stop_loss_to_key_level("SELL", entry=100.0, stop_loss=120.0, key_levels=_levels(swing_high=130.0))
+    assert new_sl == 120.0
+    assert note is None
+
+
+def test_pull_stop_loss_never_widens():
+    # A level sits beyond the raw stop (130 > 120) -- must NOT extend the stop out to it.
+    new_sl, _ = pull_stop_loss_to_key_level("SELL", entry=100.0, stop_loss=120.0, key_levels=_levels(prior_week_high=130.0))
+    assert new_sl == 120.0
+
+
+def test_pull_stop_loss_never_touches_entry():
+    new_sl, _ = pull_stop_loss_to_key_level("SELL", entry=100.0, stop_loss=120.0, key_levels=_levels(swing_high=100.5))
+    assert new_sl > 100.0
+
+
+def test_pull_stop_loss_buy_direction_mirrors_sell():
+    # BUY: entry=100, raw stop=80, a support level sits at 90 -- tighten to 89.99.
+    new_sl, note = pull_stop_loss_to_key_level("BUY", entry=100.0, stop_loss=80.0, key_levels=_levels(swing_low=90.0))
+    assert new_sl == 89.99
+    assert note is not None
+
+
+def test_pull_take_profit_pulls_in_for_sell_when_level_is_in_the_way():
+    # SELL: entry=100, raw target=60, a support level sits at 80 -- pull TP to 80.01.
+    new_tp, note = pull_take_profit_to_key_level("SELL", entry=100.0, take_profit=60.0, key_levels=_levels(swing_low=80.0))
+    assert new_tp == 80.01
+    assert note is not None
+    assert "Swing Low" in note
+
+
+def test_pull_take_profit_picks_nearest_to_entry_among_multiple_levels():
+    # Two levels between target and entry (70 and 85) -- must pick 85 (nearest to entry).
+    new_tp, note = pull_take_profit_to_key_level(
+        "SELL", entry=100.0, take_profit=60.0, key_levels=_levels(swing_low=70.0, round_number_below=85.0)
+    )
+    assert new_tp == 85.01
+    assert "Round Number Below" in note
+
+
+def test_pull_take_profit_no_op_when_no_level_in_the_way():
+    new_tp, note = pull_take_profit_to_key_level("SELL", entry=100.0, take_profit=60.0, key_levels=_levels(swing_low=50.0))
+    assert new_tp == 60.0
+    assert note is None
+
+
+def test_pull_take_profit_never_extends_further_out():
+    # A level sits beyond the raw target (50 < 60) -- must NOT push the target further out to it.
+    new_tp, _ = pull_take_profit_to_key_level("SELL", entry=100.0, take_profit=60.0, key_levels=_levels(prior_week_low=50.0))
+    assert new_tp == 60.0
+
+
+def test_pull_take_profit_never_touches_entry():
+    new_tp, _ = pull_take_profit_to_key_level("SELL", entry=100.0, take_profit=60.0, key_levels=_levels(swing_low=99.5))
+    assert new_tp < 100.0
+
+
+def test_pull_take_profit_buy_direction_mirrors_sell():
+    # BUY: entry=100, raw target=140, a resistance level sits at 120 -- pull TP to 119.99.
+    new_tp, note = pull_take_profit_to_key_level("BUY", entry=100.0, take_profit=140.0, key_levels=_levels(swing_high=120.0))
+    assert new_tp == 119.99
+    assert note is not None

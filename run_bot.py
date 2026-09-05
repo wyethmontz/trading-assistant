@@ -9,7 +9,7 @@ from src.context_sources import get_external_gold_news, get_gold_news, get_macro
 from src.economic_calendar import get_high_impact_blackout
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
-from src.key_levels import KeyLevels, compute_key_levels
+from src.key_levels import KeyLevels, compute_key_levels, pull_stop_loss_to_key_level, pull_take_profit_to_key_level
 from src.market_data import get_gold_data
 from src.notifier import send_telegram
 from src.signal_tracker import log_signal, resolve_open_signals
@@ -46,6 +46,14 @@ def _key_levels_block(key_levels: KeyLevels | None) -> str:
     return "\nKey Levels:\n" + "\n".join(lines) + "\n"
 
 
+def _apply_sell_take_profit_buffer(take_profit: float, buffer: float, entry: float) -> float:
+    """Nudge SELL's take profit up by `buffer` (a less aggressive target). In low-ATR
+    conditions the raw target can be closer to entry than the buffer itself, so a flat
+    buffer can overshoot past entry entirely -- clamp it just below entry (never
+    touching entry itself) so Take Profit always stays a real profit level."""
+    return min(take_profit + buffer, entry - 0.01)
+
+
 def build_message(
     now: datetime,
     execution_signal: str,
@@ -53,10 +61,12 @@ def build_message(
     advice,
     feasibility,
     effective_entry: float,
+    stop_loss: float,
+    take_profit: float,
     contract_size_oz_per_lot: float,
-    sell_take_profit_buffer: float = 0.0,
     blackout_reason: str = "",
     key_levels: KeyLevels | None = None,
+    key_level_notes: list[str] | None = None,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -64,21 +74,13 @@ def build_message(
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
 
-    # For SELL, the displayed Take Profit is nudged up by `sell_take_profit_buffer`
-    # (a less aggressive target); BUY and WAIT are unaffected. In low-ATR conditions
-    # the raw target can be closer to entry than the buffer itself, so a flat +$30
-    # can overshoot past entry entirely -- clamp it just below entry (never touching
-    # entry itself) so Take Profit always stays a real profit level for the SELL.
-    if execution_signal == "SELL":
-        display_take_profit = min(advice.take_profit + sell_take_profit_buffer, effective_entry - 0.01)
-    else:
-        display_take_profit = advice.take_profit
-
     # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
-    # Every derived number below is measured from it, and the position size / risk were
-    # sized off it too, so the whole message describes one coherent trade.
-    stop_distance = abs(effective_entry - advice.stop_loss)
-    target_distance = abs(display_take_profit - effective_entry)
+    # `stop_loss`/`take_profit` are the final, already-adjusted levels (buffer + key-level
+    # pull-in applied upstream). Every derived number below is measured from these same
+    # values, and the position size / risk were sized off them too, so the whole message
+    # describes one coherent trade.
+    stop_distance = abs(effective_entry - stop_loss)
+    target_distance = abs(take_profit - effective_entry)
 
     lots = feasibility.rounded_lots
     size_oz = lots * contract_size_oz_per_lot
@@ -96,8 +98,8 @@ def build_message(
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {lots:.2f}\n"
         f"{price_label}: ${effective_entry:,.2f}\n"
-        f"Take Profit Level: ${display_take_profit:,.2f}\n"
-        f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
+        f"Take Profit Level: ${take_profit:,.2f}\n"
+        f"Stop Loss Level: ${stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n"
         f"{_key_levels_block(key_levels)}\n"
@@ -106,6 +108,8 @@ def build_message(
     )
     if feasibility.note:
         message += f"\nNote: {feasibility.note}"
+    for note in key_level_notes or []:
+        message += f"\nNote: {note}"
     if blackout_reason:
         message += f"\nNote: Held for high-impact event — {blackout_reason}"
     return message
@@ -190,11 +194,26 @@ def main() -> None:
     # the tuned config). Distances, sizing and the logged signal all use this same price.
     effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
 
+    # SL/TP shape follows the advisor's trend for WAIT too (bearish WAIT is shaped like
+    # SELL, everything else like BUY) -- match that same direction here so the pull-in
+    # below tightens/pulls toward entry consistently with what's actually displayed.
+    adjustment_direction = "SELL" if advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish") else "BUY"
+
+    # Tighten the stop toward entry if a key level sits closer than the raw ATR stop --
+    # never widens, never touches entry, so this can only reduce risk versus the raw
+    # stop. Do this *before* sizing so the position size reflects the real stop used.
+    final_stop_loss, stop_loss_note = pull_stop_loss_to_key_level(
+        direction=adjustment_direction,
+        entry=effective_entry,
+        stop_loss=advice.stop_loss,
+        key_levels=key_levels,
+    )
+
     feasibility = evaluate_trade_feasibility(
         account_balance=account_balance,
         risk_pct=sizing_risk_pct,
         entry=effective_entry,
-        stop=advice.stop_loss,
+        stop=final_stop_loss,
         spec=spec,
         max_risk_pct=effective_risk_pct,
     )
@@ -229,6 +248,22 @@ def main() -> None:
 
     downgraded = execution_signal != advice.action
 
+    # SELL gets its own less-aggressive-target buffer only when it's actually being
+    # executed (not when downgraded to WAIT); every shape then gets the same
+    # pull-toward-entry treatment as the stop, for the same reason -- never touches
+    # entry, only ever pulls the target closer if a key level is realistically in the way.
+    base_take_profit = (
+        _apply_sell_take_profit_buffer(advice.take_profit, sell_take_profit_buffer, effective_entry)
+        if execution_signal == "SELL"
+        else advice.take_profit
+    )
+    final_take_profit, take_profit_note = pull_take_profit_to_key_level(
+        direction=adjustment_direction,
+        entry=effective_entry,
+        take_profit=base_take_profit,
+        key_levels=key_levels,
+    )
+
     print("Resolving open tracked signals against fresh price data...")
     resolve_open_signals()
 
@@ -237,8 +272,8 @@ def main() -> None:
             now=now,
             action=advice.action,
             entry=effective_entry,
-            stop=advice.stop_loss,
-            target=advice.take_profit,
+            stop=final_stop_loss,
+            target=final_take_profit,
             confidence=advice.confidence,
             trend=advice.trend,
             actionable=(execution_signal == advice.action),
@@ -251,10 +286,12 @@ def main() -> None:
         advice=advice,
         feasibility=feasibility,
         effective_entry=effective_entry,
+        stop_loss=final_stop_loss,
+        take_profit=final_take_profit,
         contract_size_oz_per_lot=contract_size,
-        sell_take_profit_buffer=sell_take_profit_buffer,
         blackout_reason=blackout_reason,
         key_levels=key_levels,
+        key_level_notes=[note for note in (stop_loss_note, take_profit_note) if note],
     )
 
     print("\n--- MESSAGE PREVIEW ---")

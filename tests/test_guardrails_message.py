@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
-from run_bot import build_message
+from run_bot import _apply_sell_take_profit_buffer, build_message
 
 SPEC = BrokerSpec(
     symbol="XAUUSD",
@@ -58,6 +58,7 @@ def test_message_numbers_are_consistent():
         now=datetime(2026, 8, 28, 14, 5, tzinfo=timezone.utc),
         execution_signal="SELL", downgraded=False, advice=advice,
         feasibility=feasibility, effective_entry=effective_entry,
+        stop_loss=advice.stop_loss, take_profit=advice.take_profit,
         contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
     )
     # Lot(s) x contract size must equal the Suggested Size oz shown.
@@ -83,6 +84,7 @@ def test_message_flags_not_placeable():
         now=datetime(2026, 8, 28, 14, 5, tzinfo=timezone.utc),
         execution_signal="WAIT", downgraded=True, advice=advice,
         feasibility=feasibility, effective_entry=advice.entry + 3.0,
+        stop_loss=advice.stop_loss, take_profit=advice.take_profit,
         contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
     )
     assert "Not placeable within risk cap" in msg
@@ -95,21 +97,18 @@ def test_sell_take_profit_buffer_never_crosses_entry():
     stop_loss = 4441.44  # 1.5x ATR above entry
     atr = (stop_loss - entry) / 1.5
     raw_take_profit = entry - 3 * atr  # 3x ATR below entry
-    advice = SimpleNamespace(action="SELL", trend="Bearish", confidence=95, entry=entry, stop_loss=stop_loss, take_profit=raw_take_profit)
 
-    feasibility = evaluate_trade_feasibility(
-        account_balance=10_000.0, risk_pct=0.25,
-        entry=entry, stop=stop_loss, spec=SPEC, max_risk_pct=0.50,
-    )
-    msg = build_message(
-        now=datetime(2026, 9, 5, 14, 31, tzinfo=timezone.utc),
-        execution_signal="SELL", downgraded=False, advice=advice,
-        feasibility=feasibility, effective_entry=entry,
-        contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
-        sell_take_profit_buffer=30.0,
-    )
-    assert f"Sell When Price is: ${entry:,.2f}" in msg
+    buffered = _apply_sell_take_profit_buffer(raw_take_profit, buffer=30.0, entry=entry)
+
     # The buffered/uncapped target would have been entry + 10.06 (the reported bug);
     # capped, it must land strictly below entry instead.
-    displayed_tp = float(msg.split("Take Profit Level: $")[1].split("\n")[0].replace(",", ""))
-    assert displayed_tp < entry
+    assert buffered < entry
+
+
+def test_sell_take_profit_buffer_unaffected_in_normal_atr_conditions():
+    # Previously-confirmed live example: buffered target should land exactly $3.06
+    # below entry, unaffected by the entry-crossing clamp.
+    entry = 4433.95
+    raw_take_profit = 4400.89
+    buffered = _apply_sell_take_profit_buffer(raw_take_profit, buffer=30.0, entry=entry)
+    assert round(entry - buffered, 2) == 3.06
