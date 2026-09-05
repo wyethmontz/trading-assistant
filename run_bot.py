@@ -131,10 +131,9 @@ def main() -> None:
         spread_usd=spread_usd,
     )
 
-    # Shorts (and bearish WAITs) are sized at half risk. Apply it to the risk budget
-    # *before* sizing so lots, oz and $ risk in the message all describe one position.
-    is_sell_like = advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish")
-    sizing_risk_pct = effective_risk_pct * 0.5 if is_sell_like else effective_risk_pct
+    # Every signal is sized at half risk. Apply it to the risk budget *before* sizing
+    # so lots, oz and $ risk in the message all describe one position.
+    sizing_risk_pct = effective_risk_pct * 0.5
 
     # The order is worked `entry_buffer` above the advisor close (both directions, per
     # the tuned config). Distances, sizing and the logged signal all use this same price.
