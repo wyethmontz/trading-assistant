@@ -4,9 +4,6 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-STOP_LOSS_DISTANCE_USD = 30.0
-TAKE_PROFIT_DISTANCE_USD = 30.0
-
 
 @dataclass
 class Advice:
@@ -61,6 +58,7 @@ def build_advice(df: pd.DataFrame, account_balance: float, risk_pct: float) -> A
     trend = _trend(latest)
     close = float(latest["Close"])
     rsi = float(latest["RSI14"])
+    atr = float(latest["ATR14"])
 
     action = "WAIT"
     notes = "No clean setup right now."
@@ -73,11 +71,11 @@ def build_advice(df: pd.DataFrame, account_balance: float, risk_pct: float) -> A
         notes = "Trend and momentum support a short setup."
 
     if action == "SELL" or (action == "WAIT" and trend == "Bearish"):
-        stop = close + STOP_LOSS_DISTANCE_USD
-        target = close - TAKE_PROFIT_DISTANCE_USD
+        stop = close + (1.5 * atr)
+        target = close - (3.0 * atr)
     else:
-        stop = close - STOP_LOSS_DISTANCE_USD
-        target = close + TAKE_PROFIT_DISTANCE_USD
+        stop = close - (1.5 * atr)
+        target = close + (3.0 * atr)
 
     risk_amount, size_oz = _position_size(account_balance, risk_pct, close, stop)
 
