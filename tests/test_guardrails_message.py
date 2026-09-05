@@ -86,3 +86,30 @@ def test_message_flags_not_placeable():
         contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
     )
     assert "Not placeable within risk cap" in msg
+
+
+def test_sell_take_profit_buffer_never_crosses_entry():
+    # Low ATR -> raw target is closer to entry than the +$30 buffer, which would
+    # otherwise push the displayed Take Profit past entry (onto the losing side).
+    entry = 4431.47
+    stop_loss = 4441.44  # 1.5x ATR above entry
+    atr = (stop_loss - entry) / 1.5
+    raw_take_profit = entry - 3 * atr  # 3x ATR below entry
+    advice = SimpleNamespace(action="SELL", trend="Bearish", confidence=95, entry=entry, stop_loss=stop_loss, take_profit=raw_take_profit)
+
+    feasibility = evaluate_trade_feasibility(
+        account_balance=10_000.0, risk_pct=0.25,
+        entry=entry, stop=stop_loss, spec=SPEC, max_risk_pct=0.50,
+    )
+    msg = build_message(
+        now=datetime(2026, 9, 5, 14, 31, tzinfo=timezone.utc),
+        execution_signal="SELL", downgraded=False, advice=advice,
+        feasibility=feasibility, effective_entry=entry,
+        contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
+        sell_take_profit_buffer=30.0,
+    )
+    assert f"Sell When Price is: ${entry:,.2f}" in msg
+    # The buffered/uncapped target would have been entry + 10.06 (the reported bug);
+    # capped, it must land strictly below entry instead.
+    displayed_tp = float(msg.split("Take Profit Level: $")[1].split("\n")[0].replace(",", ""))
+    assert displayed_tp < entry
