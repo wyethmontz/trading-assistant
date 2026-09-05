@@ -65,8 +65,14 @@ def build_message(
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
 
     # For SELL, the displayed Take Profit is nudged up by `sell_take_profit_buffer`
-    # (a less aggressive target); BUY and WAIT are unaffected.
-    display_take_profit = advice.take_profit + sell_take_profit_buffer if execution_signal == "SELL" else advice.take_profit
+    # (a less aggressive target); BUY and WAIT are unaffected. In low-ATR conditions
+    # the raw target can be closer to entry than the buffer itself, so a flat +$30
+    # can overshoot past entry entirely -- clamp it just below entry (never touching
+    # entry itself) so Take Profit always stays a real profit level for the SELL.
+    if execution_signal == "SELL":
+        display_take_profit = min(advice.take_profit + sell_take_profit_buffer, effective_entry - 0.01)
+    else:
+        display_take_profit = advice.take_profit
 
     # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
     # Every derived number below is measured from it, and the position size / risk were
