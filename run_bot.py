@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from src.advisor import build_advice
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
 from src.context_sources import get_external_gold_news, get_gold_news, get_macro_snapshot, score_gold_news_sentiment
+from src.economic_calendar import get_high_impact_blackout
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
 from src.market_data import get_gold_data
@@ -27,6 +28,7 @@ def build_message(
     effective_entry: float,
     contract_size_oz_per_lot: float,
     sell_take_profit_buffer: float = 0.0,
+    blackout_reason: str = "",
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -69,6 +71,8 @@ def build_message(
     )
     if feasibility.note:
         message += f"\nNote: {feasibility.note}"
+    if blackout_reason:
+        message += f"\nNote: Held for high-impact event — {blackout_reason}"
     return message
 
 
@@ -88,6 +92,9 @@ def main() -> None:
     spread_usd = _env_float("SPREAD_USD", 0.5)
     entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
     sell_take_profit_buffer = _env_float("SELL_TAKE_PROFIT_BUFFER_USD", 30.0)
+    economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
+    news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 60.0)
+    news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -154,6 +161,17 @@ def main() -> None:
     elif advice.action == "SELL":
         source_alignment = macro_bias <= 0 and news_sentiment <= 10
 
+    blackout_reason = ""
+    if economic_calendar_check:
+        print("Checking economic calendar for high-impact events...")
+        in_blackout, blackout_reason = get_high_impact_blackout(
+            now=now,
+            before_minutes=news_blackout_before_minutes,
+            after_minutes=news_blackout_after_minutes,
+        )
+        if in_blackout:
+            print(f"[run_bot] High-impact event window active: {blackout_reason}")
+
     execution_signal = advice.action
     if advice.action != "WAIT":
         if advice.confidence < effective_confidence_floor:
@@ -161,6 +179,8 @@ def main() -> None:
         if not feasibility.tradable:
             execution_signal = "WAIT"
         if adaptive_mode and journal_stats.loss_streak >= 2 and not source_alignment:
+            execution_signal = "WAIT"
+        if blackout_reason:
             execution_signal = "WAIT"
 
     downgraded = execution_signal != advice.action
@@ -189,6 +209,7 @@ def main() -> None:
         effective_entry=effective_entry,
         contract_size_oz_per_lot=contract_size,
         sell_take_profit_buffer=sell_take_profit_buffer,
+        blackout_reason=blackout_reason,
     )
 
     print("\n--- MESSAGE PREVIEW ---")

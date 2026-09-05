@@ -31,6 +31,9 @@ jobs:
           CONFIDENCE_FLOOR: ${{ vars.CONFIDENCE_FLOOR || '65' }}
           ENTRY_BUFFER_USD: ${{ vars.ENTRY_BUFFER_USD || '0' }}
           SELL_TAKE_PROFIT_BUFFER_USD: ${{ vars.SELL_TAKE_PROFIT_BUFFER_USD || '30' }}
+          ECONOMIC_CALENDAR_CHECK: ${{ vars.ECONOMIC_CALENDAR_CHECK || 'true' }}
+          NEWS_BLACKOUT_BEFORE_MINUTES: ${{ vars.NEWS_BLACKOUT_BEFORE_MINUTES || '60' }}
+          NEWS_BLACKOUT_AFTER_MINUTES: ${{ vars.NEWS_BLACKOUT_AFTER_MINUTES || '60' }}
         run: python run_bot.py
 
       - name: Persist signal log
