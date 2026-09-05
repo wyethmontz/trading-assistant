@@ -9,6 +9,7 @@ from src.context_sources import get_external_gold_news, get_gold_news, get_macro
 from src.economic_calendar import get_high_impact_blackout
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
+from src.key_levels import KeyLevels, compute_key_levels
 from src.market_data import get_gold_data
 from src.notifier import send_telegram
 from src.signal_tracker import log_signal, resolve_open_signals
@@ -17,6 +18,32 @@ from src.signal_tracker import log_signal, resolve_open_signals
 def _env_float(name: str, default: float) -> float:
     value = os.environ.get(name, "")
     return float(value) if value else default
+
+
+def _fmt_level(value: float | None) -> str:
+    return f"${value:,.2f}" if value is not None else "N/A"
+
+
+def _key_levels_block(key_levels: KeyLevels | None) -> str:
+    if key_levels is None:
+        return ""
+
+    lines = []
+    if key_levels.swing_high is not None or key_levels.swing_low is not None:
+        lines.append(f"Swing High: {_fmt_level(key_levels.swing_high)} | Swing Low: {_fmt_level(key_levels.swing_low)}")
+    if key_levels.prior_day_high is not None or key_levels.prior_day_low is not None:
+        lines.append(f"Prior Day High: {_fmt_level(key_levels.prior_day_high)} | Low: {_fmt_level(key_levels.prior_day_low)}")
+    if key_levels.prior_week_high is not None or key_levels.prior_week_low is not None:
+        lines.append(f"Prior Week High: {_fmt_level(key_levels.prior_week_high)} | Low: {_fmt_level(key_levels.prior_week_low)}")
+    if key_levels.round_number_above is not None or key_levels.round_number_below is not None:
+        lines.append(
+            f"Round Numbers: {_fmt_level(key_levels.round_number_above)} (above) | "
+            f"{_fmt_level(key_levels.round_number_below)} (below)"
+        )
+
+    if not lines:
+        return ""
+    return "\nKey Levels:\n" + "\n".join(lines) + "\n"
 
 
 def build_message(
@@ -29,6 +56,7 @@ def build_message(
     contract_size_oz_per_lot: float,
     sell_take_profit_buffer: float = 0.0,
     blackout_reason: str = "",
+    key_levels: KeyLevels | None = None,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -65,7 +93,8 @@ def build_message(
         f"Take Profit Level: ${display_take_profit:,.2f}\n"
         f"Stop Loss Level: ${advice.stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
-        f"TP - Entry: ${target_distance:,.2f}\n\n"
+        f"TP - Entry: ${target_distance:,.2f}\n"
+        f"{_key_levels_block(key_levels)}\n"
         f"{risk_line}\n"
         f"Suggested Size: {size_oz:,.2f} oz"
     )
@@ -95,6 +124,7 @@ def main() -> None:
     economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
     news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
+    key_level_swing_lookback = int(_env_float("KEY_LEVEL_SWING_LOOKBACK", 5))
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -108,6 +138,14 @@ def main() -> None:
         return
 
     advice = build_advice(analysis_df, account_balance=account_balance, risk_pct=risk_pct)
+
+    # Informational only — computed from raw OHLC history, never fed into entry/SL/TP
+    # or any guardrail above.
+    key_levels = compute_key_levels(
+        raw_df,
+        current_price=float(raw_df["Close"].iloc[-1]),
+        swing_lookback=key_level_swing_lookback,
+    )
 
     print("Fetching macro snapshot and news...")
     macro_df, macro_bias = get_macro_snapshot(period="1mo", interval="1d")
@@ -210,6 +248,7 @@ def main() -> None:
         contract_size_oz_per_lot=contract_size,
         sell_take_profit_buffer=sell_take_profit_buffer,
         blackout_reason=blackout_reason,
+        key_levels=key_levels,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
