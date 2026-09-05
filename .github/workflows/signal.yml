@@ -34,6 +34,7 @@ jobs:
           ECONOMIC_CALENDAR_CHECK: ${{ vars.ECONOMIC_CALENDAR_CHECK || 'true' }}
           NEWS_BLACKOUT_BEFORE_MINUTES: ${{ vars.NEWS_BLACKOUT_BEFORE_MINUTES || '120' }}
           NEWS_BLACKOUT_AFTER_MINUTES: ${{ vars.NEWS_BLACKOUT_AFTER_MINUTES || '60' }}
+          KEY_LEVEL_SWING_LOOKBACK: ${{ vars.KEY_LEVEL_SWING_LOOKBACK || '5' }}
         run: python run_bot.py
 
       - name: Persist signal log
