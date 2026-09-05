@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from src.advisor import build_advice
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
 from src.context_sources import get_external_gold_news, get_gold_news, get_macro_snapshot, score_gold_news_sentiment
-from src.economic_calendar import get_high_impact_blackout, get_news_driven_bias
+from src.economic_calendar import get_high_impact_blackout
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
 from src.market_data import get_gold_data
@@ -29,7 +29,6 @@ def build_message(
     contract_size_oz_per_lot: float,
     sell_take_profit_buffer: float = 0.0,
     blackout_reason: str = "",
-    news_confirmation: str = "",
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -72,9 +71,7 @@ def build_message(
     )
     if feasibility.note:
         message += f"\nNote: {feasibility.note}"
-    if news_confirmation:
-        message += f"\nNote: Signal driven by high-impact news — {news_confirmation}"
-    elif blackout_reason:
+    if blackout_reason:
         message += f"\nNote: Held for high-impact event — {blackout_reason}"
     return message
 
@@ -165,7 +162,6 @@ def main() -> None:
         source_alignment = macro_bias <= 0 and news_sentiment <= 10
 
     blackout_reason = ""
-    news_confirmation = ""
     if economic_calendar_check:
         print("Checking economic calendar for high-impact events...")
         in_blackout, blackout_reason = get_high_impact_blackout(
@@ -184,16 +180,8 @@ def main() -> None:
             execution_signal = "WAIT"
         if adaptive_mode and journal_stats.loss_streak >= 2 and not source_alignment:
             execution_signal = "WAIT"
-        if blackout_reason and execution_signal == advice.action:
-            # A BUY/SELL that otherwise cleared every other guardrail is only held
-            # for the news blackout. If the event's own actual-vs-forecast surprise
-            # has since confirmed the same direction, let it through; otherwise
-            # (surprise disagrees, or hasn't been published yet) keep holding WAIT.
-            news_direction, news_explanation = get_news_driven_bias(now=now, after_minutes=news_blackout_after_minutes)
-            if news_direction == advice.action:
-                news_confirmation = news_explanation
-            else:
-                execution_signal = "WAIT"
+        if blackout_reason:
+            execution_signal = "WAIT"
 
     downgraded = execution_signal != advice.action
 
@@ -222,7 +210,6 @@ def main() -> None:
         contract_size_oz_per_lot=contract_size,
         sell_take_profit_buffer=sell_take_profit_buffer,
         blackout_reason=blackout_reason,
-        news_confirmation=news_confirmation,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
