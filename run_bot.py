@@ -20,30 +20,33 @@ def _env_float(name: str, default: float) -> float:
     return float(value) if value else default
 
 
-def _fmt_level(value: float | None) -> str:
-    return f"${value:,.2f}" if value is not None else "N/A"
+def _fmt_level(value: float | None, entry: float) -> str:
+    if value is None:
+        return "N/A"
+    distance = abs(value - entry)
+    return f"${value:,.2f} (${distance:,.2f})"
 
 
-def _key_levels_block(key_levels: KeyLevels | None) -> str:
+def _key_levels_block(key_levels: KeyLevels | None, entry: float) -> str:
     if key_levels is None:
         return ""
 
     lines = []
     if key_levels.swing_high is not None or key_levels.swing_low is not None:
-        lines.append(f"Swing High: {_fmt_level(key_levels.swing_high)} | Swing Low: {_fmt_level(key_levels.swing_low)}")
+        lines.append(f"Swing High: {_fmt_level(key_levels.swing_high, entry)} | Swing Low: {_fmt_level(key_levels.swing_low, entry)}")
     if key_levels.prior_day_high is not None or key_levels.prior_day_low is not None:
-        lines.append(f"Prior Day High: {_fmt_level(key_levels.prior_day_high)} | Low: {_fmt_level(key_levels.prior_day_low)}")
+        lines.append(f"Prior Day High: {_fmt_level(key_levels.prior_day_high, entry)} | Low: {_fmt_level(key_levels.prior_day_low, entry)}")
     if key_levels.prior_week_high is not None or key_levels.prior_week_low is not None:
-        lines.append(f"Prior Week High: {_fmt_level(key_levels.prior_week_high)} | Low: {_fmt_level(key_levels.prior_week_low)}")
+        lines.append(f"Prior Week High: {_fmt_level(key_levels.prior_week_high, entry)} | Low: {_fmt_level(key_levels.prior_week_low, entry)}")
     if key_levels.round_number_above is not None or key_levels.round_number_below is not None:
         lines.append(
-            f"Round Numbers: {_fmt_level(key_levels.round_number_above)} (above) | "
-            f"{_fmt_level(key_levels.round_number_below)} (below)"
+            f"Round Numbers: {_fmt_level(key_levels.round_number_above, entry)} (above) | "
+            f"{_fmt_level(key_levels.round_number_below, entry)} (below)"
         )
 
     if not lines:
         return ""
-    return "\nKey Levels:\n" + "\n".join(lines) + "\n"
+    return "\nKey Levels (distance from entry):\n" + "\n".join(lines) + "\n"
 
 
 def _apply_sell_take_profit_buffer(take_profit: float, buffer: float, entry: float) -> float:
@@ -102,7 +105,7 @@ def build_message(
         f"Stop Loss Level: ${stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
         f"TP - Entry: ${target_distance:,.2f}\n"
-        f"{_key_levels_block(key_levels)}\n"
+        f"{_key_levels_block(key_levels, effective_entry)}\n"
         f"{risk_line}\n"
         f"Suggested Size: {size_oz:,.2f} oz"
     )
