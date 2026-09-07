@@ -9,7 +9,6 @@ from src.context_sources import get_external_gold_news, get_gold_news, get_macro
 from src.economic_calendar import get_high_impact_blackout
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
-from src.key_levels import KeyLevels, compute_key_levels, pull_stop_loss_to_key_level, pull_take_profit_to_key_level
 from src.market_data import get_gold_data
 from src.notifier import send_telegram
 from src.signal_tracker import log_signal, resolve_open_signals
@@ -18,35 +17,6 @@ from src.signal_tracker import log_signal, resolve_open_signals
 def _env_float(name: str, default: float) -> float:
     value = os.environ.get(name, "")
     return float(value) if value else default
-
-
-def _fmt_level(value: float | None, entry: float) -> str:
-    if value is None:
-        return "N/A"
-    distance = abs(value - entry)
-    return f"${value:,.2f} (${distance:,.2f})"
-
-
-def _key_levels_block(key_levels: KeyLevels | None, entry: float) -> str:
-    if key_levels is None:
-        return ""
-
-    lines = []
-    if key_levels.swing_high is not None or key_levels.swing_low is not None:
-        lines.append(f"Swing High: {_fmt_level(key_levels.swing_high, entry)} | Swing Low: {_fmt_level(key_levels.swing_low, entry)}")
-    if key_levels.prior_day_high is not None or key_levels.prior_day_low is not None:
-        lines.append(f"Prior Day High: {_fmt_level(key_levels.prior_day_high, entry)} | Low: {_fmt_level(key_levels.prior_day_low, entry)}")
-    if key_levels.prior_week_high is not None or key_levels.prior_week_low is not None:
-        lines.append(f"Prior Week High: {_fmt_level(key_levels.prior_week_high, entry)} | Low: {_fmt_level(key_levels.prior_week_low, entry)}")
-    if key_levels.round_number_above is not None or key_levels.round_number_below is not None:
-        lines.append(
-            f"Round Numbers: {_fmt_level(key_levels.round_number_above, entry)} (above) | "
-            f"{_fmt_level(key_levels.round_number_below, entry)} (below)"
-        )
-
-    if not lines:
-        return ""
-    return "\nKey Levels (distance from entry):\n" + "\n".join(lines) + "\n"
 
 
 def _apply_sell_take_profit_buffer(take_profit: float, buffer: float, entry: float) -> float:
@@ -68,8 +38,6 @@ def build_message(
     take_profit: float,
     contract_size_oz_per_lot: float,
     blackout_reason: str = "",
-    key_levels: KeyLevels | None = None,
-    key_level_notes: list[str] | None = None,
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -78,10 +46,9 @@ def build_message(
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
 
     # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
-    # `stop_loss`/`take_profit` are the final, already-adjusted levels (buffer + key-level
-    # pull-in applied upstream). Every derived number below is measured from these same
-    # values, and the position size / risk were sized off them too, so the whole message
-    # describes one coherent trade.
+    # `stop_loss`/`take_profit` are the final levels (SELL buffer applied upstream).
+    # Every derived number below is measured from these same values, and the position
+    # size / risk were sized off them too, so the whole message describes one coherent trade.
     stop_distance = abs(effective_entry - stop_loss)
     target_distance = abs(take_profit - effective_entry)
 
@@ -104,15 +71,12 @@ def build_message(
         f"Take Profit Level: ${take_profit:,.2f}\n"
         f"Stop Loss Level: ${stop_loss:,.2f}\n"
         f"Entry - SL: ${stop_distance:,.2f}\n"
-        f"TP - Entry: ${target_distance:,.2f}\n"
-        f"{_key_levels_block(key_levels, effective_entry)}\n"
+        f"TP - Entry: ${target_distance:,.2f}\n\n"
         f"{risk_line}\n"
         f"Suggested Size: {size_oz:,.2f} oz"
     )
     if feasibility.note:
         message += f"\nNote: {feasibility.note}"
-    for note in key_level_notes or []:
-        message += f"\nNote: {note}"
     if blackout_reason:
         message += f"\nNote: Held for high-impact event — {blackout_reason}"
     return message
@@ -137,7 +101,6 @@ def main() -> None:
     economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
     news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
-    key_level_swing_lookback = int(_env_float("KEY_LEVEL_SWING_LOOKBACK", 5))
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -151,14 +114,6 @@ def main() -> None:
         return
 
     advice = build_advice(analysis_df, account_balance=account_balance, risk_pct=risk_pct)
-
-    # Informational only — computed from raw OHLC history, never fed into entry/SL/TP
-    # or any guardrail above.
-    key_levels = compute_key_levels(
-        raw_df,
-        current_price=float(raw_df["Close"].iloc[-1]),
-        swing_lookback=key_level_swing_lookback,
-    )
 
     print("Fetching macro snapshot and news...")
     macro_df, macro_bias = get_macro_snapshot(period="1mo", interval="1d")
@@ -196,21 +151,7 @@ def main() -> None:
     # The order is worked `entry_buffer` above the advisor close (both directions, per
     # the tuned config). Distances, sizing and the logged signal all use this same price.
     effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
-
-    # SL/TP shape follows the advisor's trend for WAIT too (bearish WAIT is shaped like
-    # SELL, everything else like BUY) -- match that same direction here so the pull-in
-    # below tightens/pulls toward entry consistently with what's actually displayed.
-    adjustment_direction = "SELL" if advice.action == "SELL" or (advice.action == "WAIT" and advice.trend == "Bearish") else "BUY"
-
-    # Tighten the stop toward entry if a key level sits closer than the raw ATR stop --
-    # never widens, never touches entry, so this can only reduce risk versus the raw
-    # stop. Do this *before* sizing so the position size reflects the real stop used.
-    final_stop_loss, stop_loss_note = pull_stop_loss_to_key_level(
-        direction=adjustment_direction,
-        entry=effective_entry,
-        stop_loss=advice.stop_loss,
-        key_levels=key_levels,
-    )
+    final_stop_loss = advice.stop_loss
 
     feasibility = evaluate_trade_feasibility(
         account_balance=account_balance,
@@ -252,19 +193,12 @@ def main() -> None:
     downgraded = execution_signal != advice.action
 
     # SELL gets its own less-aggressive-target buffer only when it's actually being
-    # executed (not when downgraded to WAIT); every shape then gets the same
-    # pull-toward-entry treatment as the stop, for the same reason -- never touches
-    # entry, only ever pulls the target closer if a key level is realistically in the way.
-    base_take_profit = (
+    # executed (not when downgraded to WAIT); the clamp keeps it from ever crossing
+    # past entry in low-ATR conditions.
+    final_take_profit = (
         _apply_sell_take_profit_buffer(advice.take_profit, sell_take_profit_buffer, effective_entry)
         if execution_signal == "SELL"
         else advice.take_profit
-    )
-    final_take_profit, take_profit_note = pull_take_profit_to_key_level(
-        direction=adjustment_direction,
-        entry=effective_entry,
-        take_profit=base_take_profit,
-        key_levels=key_levels,
     )
 
     print("Resolving open tracked signals against fresh price data...")
@@ -293,8 +227,6 @@ def main() -> None:
         take_profit=final_take_profit,
         contract_size_oz_per_lot=contract_size,
         blackout_reason=blackout_reason,
-        key_levels=key_levels,
-        key_level_notes=[note for note in (stop_loss_note, take_profit_note) if note],
     )
 
     print("\n--- MESSAGE PREVIEW ---")
