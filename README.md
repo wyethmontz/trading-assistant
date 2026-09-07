@@ -96,7 +96,6 @@ python run_bot.py
 | `INCLUDE_WAIT_SIGNALS` | When `ONLY_SEND_BUY` is `false`, whether to also send `WAIT` signals | `true` |
 | `ECONOMIC_CALENDAR_CHECK` | Hold BUY/SELL to `WAIT` around high-impact USD events (NFP, CPI, FOMC, etc.) from ForexFactory's calendar | `true` |
 | `NEWS_BLACKOUT_BEFORE_MINUTES`, `NEWS_BLACKOUT_AFTER_MINUTES` | How close to a high-impact event to hold signals | `120`, `60` |
-| `KEY_LEVEL_SWING_LOOKBACK` | Bars required on each side to confirm a swing high/low for the informational "Key Levels" section | `5` |
 
 ### Automated schedule
 
