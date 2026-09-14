@@ -19,14 +19,6 @@ def _env_float(name: str, default: float) -> float:
     return float(value) if value else default
 
 
-def _apply_sell_take_profit_buffer(take_profit: float, buffer: float, entry: float) -> float:
-    """Nudge SELL's take profit up by `buffer` (a less aggressive target). In low-ATR
-    conditions the raw target can be closer to entry than the buffer itself, so a flat
-    buffer can overshoot past entry entirely -- clamp it just below entry (never
-    touching entry itself) so Take Profit always stays a real profit level."""
-    return min(take_profit + buffer, entry - 0.01)
-
-
 def build_message(
     now: datetime,
     execution_signal: str,
@@ -45,10 +37,10 @@ def build_message(
 
     price_label = f"{execution_signal.capitalize()} When Price is" if execution_signal != "WAIT" else "Reference Price"
 
-    # `effective_entry` is the price the order is worked at (advisor close + entry buffer).
-    # `stop_loss`/`take_profit` are the final levels (SELL buffer applied upstream).
-    # Every derived number below is measured from these same values, and the position
-    # size / risk were sized off them too, so the whole message describes one coherent trade.
+    # `effective_entry`, `stop_loss`, and `take_profit` are the plain advisor numbers --
+    # no buffer or adjustment of any kind. Every derived number below is measured from
+    # these same values, and the position size / risk were sized off them too, so the
+    # whole message describes one coherent trade.
     stop_distance = abs(effective_entry - stop_loss)
     target_distance = abs(take_profit - effective_entry)
 
@@ -96,8 +88,6 @@ def main() -> None:
     lot_step = _env_float("LOT_STEP", 0.01)
     max_lot = _env_float("MAX_LOT", 50.0)
     spread_usd = _env_float("SPREAD_USD", 0.5)
-    entry_buffer = _env_float("ENTRY_BUFFER_USD", 0.0)
-    sell_take_profit_buffer = _env_float("SELL_TAKE_PROFIT_BUFFER_USD", 30.0)
     economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
     news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
@@ -148,9 +138,9 @@ def main() -> None:
     # so lots, oz and $ risk in the message all describe one position.
     sizing_risk_pct = effective_risk_pct * 0.5
 
-    # The order is worked `entry_buffer` above the advisor close (both directions, per
-    # the tuned config). Distances, sizing and the logged signal all use this same price.
-    effective_entry = advice.entry + entry_buffer if advice.entry > 0 else advice.entry
+    # Plain advisor numbers, no adjustment. Distances, sizing and the logged signal all
+    # use these same values.
+    effective_entry = advice.entry
     final_stop_loss = advice.stop_loss
 
     feasibility = evaluate_trade_feasibility(
@@ -191,15 +181,7 @@ def main() -> None:
             execution_signal = "WAIT"
 
     downgraded = execution_signal != advice.action
-
-    # SELL gets its own less-aggressive-target buffer only when it's actually being
-    # executed (not when downgraded to WAIT); the clamp keeps it from ever crossing
-    # past entry in low-ATR conditions.
-    final_take_profit = (
-        _apply_sell_take_profit_buffer(advice.take_profit, sell_take_profit_buffer, effective_entry)
-        if execution_signal == "SELL"
-        else advice.take_profit
-    )
+    final_take_profit = advice.take_profit
 
     print("Resolving open tracked signals against fresh price data...")
     resolve_open_signals()

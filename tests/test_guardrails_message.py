@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
-from run_bot import _apply_sell_take_profit_buffer, build_message
+from run_bot import build_message
 
 SPEC = BrokerSpec(
     symbol="XAUUSD",
@@ -49,7 +49,7 @@ def test_message_numbers_are_consistent():
         action="SELL", trend="Bearish", confidence=95,
         entry=4555.92, stop_loss=4584.43, take_profit=4498.89,
     )
-    effective_entry = advice.entry + 3.0
+    effective_entry = advice.entry
     feasibility = evaluate_trade_feasibility(
         account_balance=10_000.0, risk_pct=0.25,
         entry=effective_entry, stop=advice.stop_loss, spec=SPEC, max_risk_pct=0.50,
@@ -65,7 +65,7 @@ def test_message_numbers_are_consistent():
     lots = feasibility.rounded_lots
     assert f"Lot(s): {lots:.2f}" in msg
     assert f"Suggested Size: {lots * 100:,.2f} oz" in msg
-    # Entry shown is the buffered entry, and the distances are measured from it.
+    # Entry shown is the plain advisor entry, and the distances are measured from it.
     assert f"${effective_entry:,.2f}" in msg
     assert f"Entry - SL: ${abs(effective_entry - advice.stop_loss):,.2f}" in msg
     assert f"TP - Entry: ${abs(advice.take_profit - effective_entry):,.2f}" in msg
@@ -83,32 +83,8 @@ def test_message_flags_not_placeable():
     msg = build_message(
         now=datetime(2026, 8, 28, 14, 5, tzinfo=timezone.utc),
         execution_signal="WAIT", downgraded=True, advice=advice,
-        feasibility=feasibility, effective_entry=advice.entry + 3.0,
+        feasibility=feasibility, effective_entry=advice.entry,
         stop_loss=advice.stop_loss, take_profit=advice.take_profit,
         contract_size_oz_per_lot=SPEC.contract_size_oz_per_lot,
     )
     assert "Not placeable within risk cap" in msg
-
-
-def test_sell_take_profit_buffer_never_crosses_entry():
-    # Low ATR -> raw target is closer to entry than the +$30 buffer, which would
-    # otherwise push the displayed Take Profit past entry (onto the losing side).
-    entry = 4431.47
-    stop_loss = 4441.44  # 1.5x ATR above entry
-    atr = (stop_loss - entry) / 1.5
-    raw_take_profit = entry - 3 * atr  # 3x ATR below entry
-
-    buffered = _apply_sell_take_profit_buffer(raw_take_profit, buffer=30.0, entry=entry)
-
-    # The buffered/uncapped target would have been entry + 10.06 (the reported bug);
-    # capped, it must land strictly below entry instead.
-    assert buffered < entry
-
-
-def test_sell_take_profit_buffer_unaffected_in_normal_atr_conditions():
-    # Previously-confirmed live example: buffered target should land exactly $3.06
-    # below entry, unaffected by the entry-crossing clamp.
-    entry = 4433.95
-    raw_take_profit = 4400.89
-    buffered = _apply_sell_take_profit_buffer(raw_take_profit, buffer=30.0, entry=entry)
-    assert round(entry - buffered, 2) == 3.06
