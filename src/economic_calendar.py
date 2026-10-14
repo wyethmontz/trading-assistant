@@ -56,3 +56,32 @@ def get_high_impact_blackout(
             return True, f"{title} at {event_time.strftime('%Y-%m-%d %H:%M UTC')}"
 
     return False, ""
+
+
+def get_next_high_impact_event(now: datetime, within_hours: float = 24.0) -> str:
+    """Return a note naming the soonest upcoming high-impact USD event within `within_hours`.
+
+    Returns "" if none is found, or the feed can't be fetched/parsed (fails open,
+    same as `get_high_impact_blackout`).
+    """
+    horizon = now + timedelta(hours=within_hours)
+    soonest: tuple[datetime, str] | None = None
+
+    for event in _fetch_calendar():
+        if event.get("impact") != "High" or event.get("country") not in HIGH_IMPACT_CURRENCIES:
+            continue
+
+        event_time = _parse_event_time(event.get("date"))
+        if event_time is None or event_time <= now or event_time > horizon:
+            continue
+
+        if soonest is None or event_time < soonest[0]:
+            soonest = (event_time, event.get("title", "High-impact economic event"))
+
+    if soonest is None:
+        return ""
+
+    event_time, title = soonest
+    minutes_until = int((event_time - now).total_seconds() // 60)
+    hours_until, mins_until = divmod(minutes_until, 60)
+    return f"{title} at {event_time.strftime('%Y-%m-%d %H:%M UTC')} (in {hours_until}h {mins_until}m)"

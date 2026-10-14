@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from src.advisor import build_advice
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
 from src.context_sources import get_external_gold_news, get_gold_news, get_macro_snapshot, score_gold_news_sentiment
-from src.economic_calendar import get_high_impact_blackout
+from src.economic_calendar import get_high_impact_blackout, get_next_high_impact_event
 from src.indicators import add_indicators
 from src.journal import get_journal_stats, load_journal
 from src.market_data import get_gold_data
@@ -30,6 +30,7 @@ def build_message(
     take_profit: float,
     contract_size_oz_per_lot: float,
     blackout_reason: str = "",
+    upcoming_event_note: str = "",
 ) -> str:
     signal_line = f"<b>Signal: {execution_signal}</b>"
     if downgraded:
@@ -71,6 +72,8 @@ def build_message(
         message += f"\nNote: {feasibility.note}"
     if blackout_reason:
         message += f"\nNote: Held for high-impact event — {blackout_reason}"
+    elif upcoming_event_note:
+        message += f"\nNote: Upcoming high-impact event — {upcoming_event_note}"
     return message
 
 
@@ -91,6 +94,7 @@ def main() -> None:
     economic_calendar_check = os.environ.get("ECONOMIC_CALENDAR_CHECK", "true").lower() == "true"
     news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
+    news_upcoming_event_hours = _env_float("NEWS_UPCOMING_EVENT_HOURS", 24.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -159,6 +163,7 @@ def main() -> None:
         source_alignment = macro_bias <= 0 and news_sentiment <= 10
 
     blackout_reason = ""
+    upcoming_event_note = ""
     if economic_calendar_check:
         print("Checking economic calendar for high-impact events...")
         in_blackout, blackout_reason = get_high_impact_blackout(
@@ -168,6 +173,10 @@ def main() -> None:
         )
         if in_blackout:
             print(f"[run_bot] High-impact event window active: {blackout_reason}")
+        else:
+            upcoming_event_note = get_next_high_impact_event(now=now, within_hours=news_upcoming_event_hours)
+            if upcoming_event_note:
+                print(f"[run_bot] Upcoming high-impact event: {upcoming_event_note}")
 
     execution_signal = advice.action
     if advice.action != "WAIT":
@@ -209,6 +218,7 @@ def main() -> None:
         take_profit=final_take_profit,
         contract_size_oz_per_lot=contract_size,
         blackout_reason=blackout_reason,
+        upcoming_event_note=upcoming_event_note,
     )
 
     print("\n--- MESSAGE PREVIEW ---")
