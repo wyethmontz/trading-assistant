@@ -53,10 +53,10 @@ def build_message(
     else:
         risk_line = f"Not placeable within risk cap — {feasibility.reason}"
 
-    display_time = now + timedelta(hours=3)
+    display_time = now + timedelta(hours=8)
 
     message = (
-        f"<b>Gold Signal — {display_time.strftime('%Y-%m-%d %H:%M')} UTC+3</b>\n\n"
+        f"<b>Gold Signal — {display_time.strftime('%Y-%m-%d %H:%M')} PHT</b>\n\n"
         f"{signal_line}\n"
         f"Trend: {advice.trend} | Confidence: {advice.confidence}%\n\n"
         f"Lot(s): {lots:.2f}\n"
