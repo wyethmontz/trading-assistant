@@ -6,6 +6,11 @@ import requests
 
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 HIGH_IMPACT_CURRENCIES = {"USD"}
+PH_TZ = timezone(timedelta(hours=8))
+
+
+def _format_ph_time(dt: datetime) -> str:
+    return dt.astimezone(PH_TZ).strftime("%Y-%m-%d %H:%M PHT")
 
 
 def _fetch_calendar() -> list[dict]:
@@ -53,7 +58,7 @@ def get_high_impact_blackout(
         window_end = event_time + timedelta(minutes=after_minutes)
         if window_start <= now <= window_end:
             title = event.get("title", "High-impact economic event")
-            return True, f"{title} at {event_time.strftime('%Y-%m-%d %H:%M UTC')}"
+            return True, f"{title} at {_format_ph_time(event_time)}"
 
     return False, ""
 
@@ -84,4 +89,4 @@ def get_next_high_impact_event(now: datetime, within_hours: float = 24.0) -> str
     event_time, title = soonest
     minutes_until = int((event_time - now).total_seconds() // 60)
     hours_until, mins_until = divmod(minutes_until, 60)
-    return f"{title} at {event_time.strftime('%Y-%m-%d %H:%M UTC')} (in {hours_until}h {mins_until}m)"
+    return f"{title} at {_format_ph_time(event_time)} (in {hours_until}h {mins_until}m)"
