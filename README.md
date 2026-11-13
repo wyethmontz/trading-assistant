@@ -97,6 +97,8 @@ python run_bot.py
 | `ECONOMIC_CALENDAR_CHECK` | Hold BUY/SELL to `WAIT` around high-impact USD events (NFP, CPI, FOMC, etc.) from ForexFactory's calendar, and note any upcoming one in the Telegram message | `true` |
 | `NEWS_BLACKOUT_BEFORE_MINUTES`, `NEWS_BLACKOUT_AFTER_MINUTES` | How close to a high-impact event to hold signals | `120`, `60` |
 | `NEWS_UPCOMING_EVENT_HOURS` | How far ahead to look for a high-impact event to mention in the Telegram message (only shown when not already held) | `24` |
+| `CANDLE_ALERT_ENABLED` | Send a separate Telegram alert when the latest 5M or 15M candle's High-Low range exceeds `CANDLE_ALERT_MIN_LENGTH_USD` | `true` |
+| `CANDLE_ALERT_MIN_LENGTH_USD` | Candle range (in USD) on the 5M/15M timeframe that triggers the alert above | `5` |
 
 ### Automated schedule
 
