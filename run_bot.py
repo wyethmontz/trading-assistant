@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from src.advisor import build_advice
 from src.broker_guardrails import BrokerSpec, evaluate_trade_feasibility
+from src.candle_alert import check_large_candle
 from src.context_sources import get_external_gold_news, get_gold_news, get_macro_snapshot, score_gold_news_sentiment
 from src.economic_calendar import get_high_impact_blackout, get_next_high_impact_event
 from src.indicators import add_indicators
@@ -95,6 +96,8 @@ def main() -> None:
     news_blackout_before_minutes = _env_float("NEWS_BLACKOUT_BEFORE_MINUTES", 120.0)
     news_blackout_after_minutes = _env_float("NEWS_BLACKOUT_AFTER_MINUTES", 60.0)
     news_upcoming_event_hours = _env_float("NEWS_UPCOMING_EVENT_HOURS", 24.0)
+    candle_alert_enabled = os.environ.get("CANDLE_ALERT_ENABLED", "true").lower() == "true"
+    candle_alert_min_length_usd = _env_float("CANDLE_ALERT_MIN_LENGTH_USD", 5.0)
 
     print("Fetching gold data (Swing 1h)...")
     raw_df = get_gold_data(period="1mo", interval="1h")
@@ -237,6 +240,21 @@ def main() -> None:
         print("[run_bot] Signal is WAIT, skipping Telegram send.")
     else:
         send_telegram(message)
+
+    if candle_alert_enabled:
+        print("Checking 5M/15M candles for large range...")
+        candle_alerts = []
+        for interval, label in (("5m", "5M"), ("15m", "15M")):
+            note = check_large_candle(interval=interval, min_length_usd=candle_alert_min_length_usd)
+            if note:
+                candle_alerts.append(f"{label} — {note}")
+
+        if candle_alerts:
+            alert_message = "<b>Large Candle Alert</b>\n\n" + "\n".join(candle_alerts)
+            print("\n--- CANDLE ALERT ---")
+            print(alert_message)
+            print("--------------------\n")
+            send_telegram(alert_message)
 
 
 if __name__ == "__main__":
